@@ -345,6 +345,14 @@ with st.sidebar:
         "The workbook should include tabs for **Portfolio**, **Milestones**, and **Risks**. "
         "Use the template below for a quick start."
     )
+    st.markdown(
+        """
+        **Workbook schema**
+        - `Portfolio`: Initiative, Workstream, Owner, Health/RAG, Percent Complete, Launch Date, Target Date, Budget, Actual Spend, Status Summary
+        - `Milestones`: Initiative, Milestone, Target Date, Status, Owner, Notes
+        - `Risks`: Initiative, Risk, Impact, Probability, Status, Mitigation, Owner
+        """
+    )
     st.download_button(
         "Download template workbook",
         data=create_template_workbook(),
