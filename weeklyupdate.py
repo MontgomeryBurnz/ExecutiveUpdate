@@ -410,8 +410,8 @@ if selected_health:
 if not include_complete:
     filtered = filtered[filtered["Health Category"] != "Complete"]
 
-milestones_filtered = milestones[milestones["Initiative"].isin(filtered["Initiative"])]
-risks_filtered = risks[risks["Initiative"].isin(filtered["Initiative"])]
+milestones_filtered = milestones[milestones["Initiative"].isin(filtered["Initiative"])].copy()
+risks_filtered = risks[risks["Initiative"].isin(filtered["Initiative"])].copy()
 
 today = pd.Timestamp(reporting_date)
 milestones_filtered["Days From Today"] = (
@@ -469,8 +469,8 @@ health_counts = (
     filtered["Health Category"]
     .value_counts()
     .reindex(STATUS_ORDER, fill_value=0)
-    .reset_index()
-    .rename(columns={"index": "Health Category", "Health Category": "Count"})
+    .rename_axis("Health Category")
+    .reset_index(name="Count")
 )
 health_chart = (
     alt.Chart(health_counts)
