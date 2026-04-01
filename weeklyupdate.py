@@ -61,6 +61,19 @@ ANONYMIZE_PREFIXES = {
     "Unit Name": "Unit",
 }
 
+REQUEST_BUCKET_ORDER = [
+    "Mass Add",
+    "PRF",
+    "SORF",
+    "SRF",
+    "Already On MOG / Check Attribute",
+    "Cannot Add Not in Stock",
+    "Conversion DIN / Use Right",
+    "1x request",
+    "Permanent request",
+    "Special exception / analyst review",
+]
+
 # ---------------------------------------------------------------------
 # Data loading utilities
 # ---------------------------------------------------------------------
@@ -146,6 +159,39 @@ def anonymize_workflow_data(workflow: pd.DataFrame) -> pd.DataFrame:
     return masked
 
 
+def classify_request_bucket(row: pd.Series) -> str:
+    request_type = str(row.get("Request Type", "") or "").strip().upper()
+    on_mog = str(row.get("On MOG", "") or "").strip().upper()
+    cannot_add = str(row.get("Cannot Add Not in Stock", "") or "").strip().lower()
+    conversion_din = str(row.get("Conversion DIN", "") or "").strip()
+    permanence = str(row.get("1x / Permanent", "") or "").strip().lower()
+    exception_flag = str(row.get("Exception Flag", "") or "").strip().upper()
+    status = str(row.get("Status", "") or "").strip().lower()
+    buy_smart = str(row.get("BuySmart Action", "") or "").strip().lower()
+
+    if "mass add" in request_type or request_type == "MASS ADD":
+        return "Mass Add"
+    if on_mog == "Y":
+        return "Already On MOG / Check Attribute"
+    if "cannot add" in cannot_add or "not in stock" in cannot_add:
+        return "Cannot Add Not in Stock"
+    if conversion_din:
+        return "Conversion DIN / Use Right"
+    if permanence == "one-time":
+        return "1x request"
+    if permanence == "permanent":
+        return "Permanent request"
+    if exception_flag == "Y" or "exception" in status or "review" in status or "exception" in buy_smart:
+        return "Special exception / analyst review"
+    if request_type == "PRF":
+        return "PRF"
+    if request_type == "SORF":
+        return "SORF"
+    if request_type == "SRF":
+        return "SRF"
+    return "Special exception / analyst review"
+
+
 def load_workflow_sheet(uploaded_file) -> pd.DataFrame:
     uploaded_file.seek(0)
     xls = pd.ExcelFile(uploaded_file)
@@ -223,6 +269,7 @@ def build_workflow_seed(
     workflow["Last Saved"] = pd.Timestamp(reporting_date)
     workflow["Last Sync"] = pd.Timestamp(reporting_date)
     workflow["Queue Bucket"] = workflow["BuySmart Action"].fillna("Unassigned").replace("", "Unassigned")
+    workflow["Request Bucket"] = workflow.apply(classify_request_bucket, axis=1)
     workflow["Needs Review"] = workflow["Status"].fillna("").astype(str).str.contains("review", case=False) | workflow[
         "Exception Flag"
     ].fillna("").astype(str).eq("Y")
@@ -266,6 +313,7 @@ def build_workflow_seed(
         "Override Reason",
         "Date Created",
         "Queue Bucket",
+        "Request Bucket",
         "Needs Review",
         "Last Sync",
         "Last Saved",
@@ -298,6 +346,7 @@ def apply_workflow_quick_action(workflow_df: pd.DataFrame, action: str, reportin
         updated.loc[selected_mask, "Needs Review"] = False
         updated.loc[selected_mask, "Rule Applied"] = "Approval automation"
 
+    updated["Request Bucket"] = updated.apply(classify_request_bucket, axis=1)
     updated.loc[selected_mask, "Last Sync"] = pd.Timestamp(reporting_date)
     return updated, affected
 def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> None:
@@ -328,6 +377,7 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
         st.session_state.workflow_action_count = 0
 
     workflow_df = st.session_state.workflow_drafts.copy()
+    workflow_df["Request Bucket"] = workflow_df.apply(classify_request_bucket, axis=1)
 
     top_cols = st.columns([1.3, 1.1, 1.1, 1.1])
     selected_rows = int(workflow_df["Selected"].fillna(False).sum())
@@ -339,26 +389,35 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
     top_cols[3].metric("Last save", st.session_state.workflow_last_save.strftime("%b %d, %I:%M %p"))
 
     dashboard_left, dashboard_right = st.columns([1.2, 0.8])
-    queue_rollup = workflow_df.groupby(["BuySmart Action", "Status"]).size().reset_index(name="Rows")
+    queue_rollup = (
+        workflow_df["Request Bucket"]
+        .value_counts()
+        .reindex(REQUEST_BUCKET_ORDER, fill_value=0)
+        .rename_axis("Request Bucket")
+        .reset_index(name="Rows")
+    )
     queue_chart = (
         alt.Chart(queue_rollup)
         .mark_bar()
         .encode(
             x=alt.X("Rows:Q", title="Rows"),
-            y=alt.Y("BuySmart Action:N", sort="-x"),
-            color=alt.Color("Status:N", scale=alt.Scale(range=["#b23a48", "#d88c2d", "#497174", "#6c757d"])),
-            tooltip=["BuySmart Action", "Status", "Rows"],
+            y=alt.Y("Request Bucket:N", sort=REQUEST_BUCKET_ORDER),
+            color=alt.Color("Request Bucket:N", legend=None, scale=alt.Scale(scheme="tableau20")),
+            tooltip=["Request Bucket", "Rows"],
         )
     )
     dashboard_left.altair_chart(queue_chart, use_container_width=True)
 
     dashboard_right.markdown(
         """
-        **Analyst workflow**
-        - Analysts work directly in request attributes, decision fields, and notes.
-        - Quick actions apply repeatable rule-based updates to the selected cases.
-        - Save captures the current draft state before export or downstream processing.
-        - Dashboard metrics show review load, exceptions, and action distribution.
+        **Request buckets**
+        - Mass Add
+        - PRF / SORF / SRF
+        - Already On MOG / Check Attribute
+        - Cannot Add Not in Stock
+        - Conversion DIN / Use Right
+        - 1x request / Permanent request
+        - Special exception / analyst review
         """
     )
 
@@ -408,6 +467,7 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
         disabled=["Case #", "Date Created", "Last Sync", "Last Saved"],
     )
 
+    edited_workflow["Request Bucket"] = edited_workflow.apply(classify_request_bucket, axis=1)
     st.session_state.workflow_drafts = edited_workflow.copy()
 
     if apply_clicked:
