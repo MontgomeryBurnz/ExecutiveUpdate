@@ -74,6 +74,17 @@ REQUEST_BUCKET_ORDER = [
     "Special exception / analyst review",
 ]
 
+OUTCOME_REPORT_ORDER = [
+    "approved",
+    "denied",
+    "1x approved",
+    "use right",
+    "find alt first",
+    "send/check with CDM",
+    "assigned",
+    "unresolved exceptions",
+]
+
 # ---------------------------------------------------------------------
 # Data loading utilities
 # ---------------------------------------------------------------------
@@ -190,6 +201,34 @@ def classify_request_bucket(row: pd.Series) -> str:
     if request_type == "SRF":
         return "SRF"
     return "Special exception / analyst review"
+
+
+def classify_outcome_reporting(row: pd.Series) -> str:
+    buy_smart = str(row.get("BuySmart Action", "") or "").strip().lower()
+    action = str(row.get("Action", "") or "").strip().lower()
+    in_stock_action = str(row.get("If In Stock Action", "") or "").strip().lower()
+    assignment = str(row.get("Assignment", "") or "").strip().lower()
+    exception_flag = str(row.get("Exception Flag", "") or "").strip().upper()
+    status = str(row.get("Status", "") or "").strip().lower()
+    permanence = str(row.get("1x / Permanent", "") or "").strip().lower()
+
+    if "denied" in buy_smart or "deny" in action:
+        return "denied"
+    if "approved" in buy_smart and permanence == "one-time":
+        return "1x approved"
+    if "approved" in buy_smart:
+        return "approved"
+    if "use right" in buy_smart or "conversion" in buy_smart or "use stocked item" in in_stock_action:
+        return "use right"
+    if "find alt" in buy_smart or "alternative" in buy_smart:
+        return "find alt first"
+    if "cdm" in buy_smart or "cdm" in action:
+        return "send/check with CDM"
+    if assignment:
+        return "assigned"
+    if exception_flag == "Y" or "exception" in status or "review" in status:
+        return "unresolved exceptions"
+    return "assigned"
 
 
 def load_workflow_sheet(uploaded_file) -> pd.DataFrame:
@@ -496,12 +535,97 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
     )
 
 
+def render_outcome_reporting(reporting_date: datetime.date) -> None:
+    st.subheader("Outcome Reporting")
+    st.caption("Sample-data reporting view for analyst outcomes and exception disposition.")
+
+    sample_workflow = build_workflow_seed(None, reporting_date).copy()
+    sample_workflow["Outcome Reporting"] = sample_workflow.apply(classify_outcome_reporting, axis=1)
+
+    outcome_rollup = (
+        sample_workflow["Outcome Reporting"]
+        .value_counts()
+        .reindex(OUTCOME_REPORT_ORDER, fill_value=0)
+        .rename_axis("Outcome Reporting")
+        .reset_index(name="Rows")
+    )
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Approved", int(outcome_rollup.loc[outcome_rollup["Outcome Reporting"] == "approved", "Rows"].sum()))
+    metric_cols[1].metric("Denied", int(outcome_rollup.loc[outcome_rollup["Outcome Reporting"] == "denied", "Rows"].sum()))
+    metric_cols[2].metric(
+        "Use Right / Alt",
+        int(
+            outcome_rollup.loc[
+                outcome_rollup["Outcome Reporting"].isin(["use right", "find alt first"]),
+                "Rows",
+            ].sum()
+        ),
+    )
+    metric_cols[3].metric(
+        "Exceptions",
+        int(outcome_rollup.loc[outcome_rollup["Outcome Reporting"] == "unresolved exceptions", "Rows"].sum()),
+    )
+
+    report_left, report_right = st.columns([1.2, 0.8])
+    outcome_chart = (
+        alt.Chart(outcome_rollup)
+        .mark_bar()
+        .encode(
+            x=alt.X("Rows:Q", title="Rows"),
+            y=alt.Y("Outcome Reporting:N", sort=OUTCOME_REPORT_ORDER),
+            color=alt.Color("Outcome Reporting:N", legend=None, scale=alt.Scale(scheme="tableau20")),
+            tooltip=["Outcome Reporting", "Rows"],
+        )
+    )
+    report_left.altair_chart(outcome_chart, use_container_width=True)
+    report_right.markdown(
+        """
+        **Outcome reporting**
+        - approved
+        - denied
+        - 1x approved
+        - use right
+        - find alt first
+        - send/check with CDM
+        - assigned
+        - unresolved exceptions
+        """
+    )
+
+    st.dataframe(
+        sample_workflow[
+            [
+                "Case #",
+                "Request Type",
+                "Business",
+                "Vendor",
+                "1x / Permanent",
+                "Action",
+                "If In Stock Action",
+                "BuySmart Action",
+                "Assignment",
+                "Status",
+                "Exception Flag",
+                "Outcome Reporting",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
 # ---------------------------------------------------------------------
 # App controls and layout
 # ---------------------------------------------------------------------
 uploaded_file = st.file_uploader("Upload analyst workflow workbook (Excel)", type=["xlsx"])
 
 with st.sidebar:
+    st.header("Experience")
+    app_view = st.radio(
+        "Mode",
+        options=["Workflow Dashboard", "Outcome Reporting"],
+    )
     st.header("Guidance")
     st.caption("Upload the analyst request workbook to edit cases, run quick actions, and export a revised draft.")
     st.markdown(
@@ -519,4 +643,7 @@ with st.sidebar:
 if uploaded_file is None:
     st.info("Using sample workflow data. Upload the analyst workbook to work with live request records.")
 
-render_workflow_dashboard(reporting_date, uploaded_file)
+if app_view == "Outcome Reporting":
+    render_outcome_reporting(reporting_date)
+else:
+    render_workflow_dashboard(reporting_date, uploaded_file)
