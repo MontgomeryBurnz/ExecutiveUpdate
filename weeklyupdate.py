@@ -48,6 +48,19 @@ WORKFLOW_COLUMNS = {
     "Item Description": ["description", "item description"],
 }
 
+ANONYMIZE_PREFIXES = {
+    "Business": "Business",
+    "Division": "Division",
+    "Sector": "Sector",
+    "Vendor": "Vendor",
+    "Manufacturer": "Manufacturer",
+    "Brand": "Brand",
+    "Parent Category": "Parent Category",
+    "Category": "Category",
+    "Subcategory": "Subcategory",
+    "Unit Name": "Unit",
+}
+
 # ---------------------------------------------------------------------
 # Data loading utilities
 # ---------------------------------------------------------------------
@@ -88,6 +101,51 @@ def normalize_date(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce")
 
 
+def anonymize_series(series: pd.Series, prefix: str) -> pd.Series:
+    cleaned = series.fillna("").astype(str).str.strip()
+    unique_values = [value for value in cleaned.unique().tolist() if value]
+    replacement_map = {value: f"{prefix} {index:02d}" for index, value in enumerate(unique_values, start=1)}
+    return cleaned.map(replacement_map).replace("", pd.NA)
+
+
+def anonymize_numeric_identifier(series: pd.Series, prefix: str) -> pd.Series:
+    cleaned = series.fillna("").astype(str).str.strip()
+    unique_values = [value for value in cleaned.unique().tolist() if value]
+    replacement_map = {value: f"{prefix}-{index:05d}" for index, value in enumerate(unique_values, start=1)}
+    return cleaned.map(replacement_map).replace("", pd.NA)
+
+
+def anonymize_free_text(series: pd.Series, prefix: str) -> pd.Series:
+    cleaned = series.fillna("").astype(str).str.strip()
+    masked = cleaned.where(cleaned.eq(""), f"{prefix} redacted")
+    return masked.replace("", pd.NA)
+
+
+def anonymize_workflow_data(workflow: pd.DataFrame) -> pd.DataFrame:
+    masked = workflow.copy()
+
+    for column, prefix in ANONYMIZE_PREFIXES.items():
+        if column in masked.columns:
+            masked[column] = anonymize_series(masked[column], prefix)
+
+    if "Case #" in masked.columns:
+        masked["Case #"] = anonymize_numeric_identifier(masked["Case #"], "CASE")
+    if "DIN" in masked.columns:
+        masked["DIN"] = anonymize_numeric_identifier(masked["DIN"], "DIN")
+    if "Conversion DIN" in masked.columns:
+        masked["Conversion DIN"] = anonymize_numeric_identifier(masked["Conversion DIN"], "CONV")
+    if "Item Description" in masked.columns:
+        masked["Item Description"] = anonymize_free_text(masked["Item Description"], "Item description")
+    if "Reason for Request" in masked.columns:
+        masked["Reason for Request"] = anonymize_free_text(masked["Reason for Request"], "Request reason")
+    if "Comments / Notes" in masked.columns:
+        masked["Comments / Notes"] = anonymize_free_text(masked["Comments / Notes"], "Analyst note")
+    if "Override Reason" in masked.columns:
+        masked["Override Reason"] = anonymize_free_text(masked["Override Reason"], "Override reason")
+
+    return masked
+
+
 def load_workflow_sheet(uploaded_file) -> pd.DataFrame:
     uploaded_file.seek(0)
     xls = pd.ExcelFile(uploaded_file)
@@ -95,6 +153,7 @@ def load_workflow_sheet(uploaded_file) -> pd.DataFrame:
     workflow = sanitize_dataframe(xls.parse(sheet_name))
     workflow = normalize_columns(workflow, WORKFLOW_COLUMNS)
     workflow = ensure_columns(workflow, WORKFLOW_COLUMNS.keys())
+    workflow = anonymize_workflow_data(workflow)
     uploaded_file.seek(0)
     return workflow
 
