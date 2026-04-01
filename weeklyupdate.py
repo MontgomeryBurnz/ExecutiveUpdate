@@ -53,6 +53,44 @@ RISK_COLUMNS = {
     "Owner": ["risk owner", "owner"],
 }
 
+WORKFLOW_COLUMNS = {
+    "Request Type": ["type", "request type"],
+    "Business": ["business"],
+    "Division": ["division"],
+    "Sector": ["sector"],
+    "Vendor": ["vendor"],
+    "Usage": ["usage"],
+    "VA / Stocking Criteria": ["meets criteria", "va / stocking criteria", "stocking criteria"],
+    "APL Indicator": ["compass apl", "apl indicator", "apl"],
+    "Pantry Indicator": ["pantry", "pantry indicator"],
+    "K12 Indicator": ["k12 apl", "k12 indicator", "k12"],
+    "In CAT": ["in cat"],
+    "On MOG": ["on mog"],
+    "Cannot Add Not in Stock": ["cannot add not in stock", "if in stock: action"],
+    "DIN": ["din"],
+    "Conversion DIN": ["conversion din"],
+    "Manufacturer": ["manufacturer"],
+    "Brand": ["brand"],
+    "Parent Category": ["parent category"],
+    "Category": ["category"],
+    "Subcategory": ["sub category", "subcategory"],
+    "Reason for Request": ["reason for request"],
+    "1x / Permanent": ["one-time or permanent", "1x / permanent indicator", "one time or permanent"],
+    "Action": ["action"],
+    "If In Stock Action": ["if in stock: action", "if in stock action"],
+    "BuySmart Action": ["buysmart action", "buy smart action"],
+    "Comments / Notes": ["comments / notes", "notes", "audit action"],
+    "Assignment": ["assignment", "owner", "assigned to"],
+    "Status": ["status"],
+    "Exception Flag": ["exception flag", "exception"],
+    "Rule Applied": ["rule applied"],
+    "Override Reason": ["override reason"],
+    "Case #": ["case#", "case #", "case"],
+    "Date Created": ["date created"],
+    "Unit Name": ["unit name"],
+    "Item Description": ["description", "item description"],
+}
+
 STATUS_ORDER = [
     "At Risk",
     "Watch",
@@ -334,94 +372,131 @@ def to_excel_bytes(portfolio: pd.DataFrame, milestones: pd.DataFrame, risks: pd.
     return output.getvalue()
 
 
-def build_workflow_seed(portfolio: pd.DataFrame, milestones: pd.DataFrame, reporting_date: datetime.date) -> pd.DataFrame:
-    portfolio_base = portfolio.copy()
-    portfolio_base["Percent Complete"] = normalize_percent(portfolio_base["Percent Complete"])
-    portfolio_base["Target Date"] = normalize_date(portfolio_base["Target Date"])
-    portfolio_base["Launch Date"] = normalize_date(portfolio_base["Launch Date"])
-    portfolio_base["Health Category"] = portfolio_base["Health"].map(categorize_health)
+def load_workflow_sheet(uploaded_file) -> pd.DataFrame:
+    uploaded_file.seek(0)
+    xls = pd.ExcelFile(uploaded_file)
+    sheet_name = xls.sheet_names[0]
+    workflow = sanitize_dataframe(xls.parse(sheet_name))
+    workflow = normalize_columns(workflow, WORKFLOW_COLUMNS)
+    workflow = ensure_columns(workflow, WORKFLOW_COLUMNS.keys())
+    uploaded_file.seek(0)
+    return workflow
 
-    upcoming = (
-        milestones.copy()
-        .assign(Target_Date=normalize_date(milestones["Target Date"]))
-        .sort_values("Target_Date")
-        .groupby("Initiative", dropna=False)
-        .first()
-        .reset_index()
-    )
-    next_milestones = upcoming[["Initiative", "Milestone", "Target_Date"]].rename(
-        columns={"Target_Date": "Next Milestone Date"}
-    )
 
-    workflow = portfolio_base.merge(next_milestones, on="Initiative", how="left")
-    queue_map = {
-        "At Risk": "Exceptions",
-        "Watch": "Manager Review",
-        "On Hold": "Dependency Hold",
-        "Complete": "Archive",
-    }
-    priority_map = {"At Risk": "P1", "Watch": "P2", "On Hold": "P2", "On Track": "P3", "Not Started": "P3"}
-
-    workflow = workflow.assign(
-        Row_ID=[f"WF-{idx:03d}" for idx in range(1, len(workflow) + 1)],
-        Queue=lambda df: df["Health Category"].map(queue_map).fillna("Active Workflow"),
-        Priority=lambda df: df["Health Category"].map(priority_map).fillna("P3"),
-        Workflow_Status=lambda df: df["Health Category"].replace(
+def build_workflow_seed(
+    workflow_source: pd.DataFrame | None,
+    portfolio: pd.DataFrame,
+    reporting_date: datetime.date,
+) -> pd.DataFrame:
+    if workflow_source is not None and not workflow_source.empty:
+        workflow = workflow_source.copy()
+    else:
+        workflow = pd.DataFrame(
             {
-                "At Risk": "Needs Update",
-                "Watch": "Pending Review",
-                "On Hold": "Blocked",
-                "Complete": "Completed",
-                "On Track": "In Progress",
-                "Not Started": "Queued",
+                "Request Type": ["PRF", "SORF", "PRF", "SRF"],
+                "Business": ["Compass USA", "Compass USA", "Compass USA", "Compass USA"],
+                "Division": ["HR", "Foodbuy", "HR", "Education"],
+                "Sector": ["Chartwells Sector", "Canteen", "Morrison", "Chartwells K12"],
+                "Vendor": ["Sysco Lincoln", "US Foods", "Performance Food Group", "Sysco Metro NY - Ritter"],
+                "Usage": [2, 18, 6, 10],
+                "VA / Stocking Criteria": ["Y", "Y", "N", "Y"],
+                "APL Indicator": ["", "Y", "Y", ""],
+                "Pantry Indicator": ["", "", "Y", ""],
+                "K12 Indicator": ["", "", "", "Y"],
+                "In CAT": ["Y", "N", "N", "Y"],
+                "On MOG": ["", "Y", "", ""],
+                "Cannot Add Not in Stock": ["", "Cannot Add. Not in Stock.", "", ""],
+                "DIN": ["7145938", "883746", "462281", "73550"],
+                "Conversion DIN": ["", "991188", "", ""],
+                "Manufacturer": ["Sunset Foods Ltd", "Ventura Foods", "Kraft Heinz", "Gordon Foodservice"],
+                "Brand": ["Boyles", "LouAna", "Heinz", "Mrs. Friday's"],
+                "Parent Category": ["Protein", "Oils", "Condiments", "Frozen Seafood"],
+                "Category": ["Beef", "Pantry", "Sauces", "Seafood"],
+                "Subcategory": ["Breaded Beef", "Cooking Oil", "Ketchup", "Crab Cakes"],
+                "Reason for Request": [
+                    "Frequent catering request",
+                    "Distributor request for stocking alignment",
+                    "Unit requested local substitution",
+                    "Cycle menu week one and week six",
+                ],
+                "1x / Permanent": ["Permanent", "Permanent", "One-Time", "One-Time"],
+                "Action": ["OK", "Review", "Override", "OK"],
+                "If In Stock Action": ["", "Use stocked item", "", "OK"],
+                "BuySmart Action": ["Approved", "Pending Review", "Exception", "Denied"],
+                "Comments / Notes": ["", "", "Awaiting category lead approval", ""],
+                "Assignment": ["Analyst Queue", "Stocking Team", "Category Manager", "Analyst Queue"],
+                "Status": ["New", "In Review", "Exception Review", "Closed"],
+                "Exception Flag": ["N", "N", "Y", "N"],
+                "Rule Applied": ["", "Stocking criteria met", "Manual override required", ""],
+                "Override Reason": ["", "", "Local menu commitment", ""],
+                "Case #": ["WO0000001", "WO0000002", "WO0000003", "WO0000004"],
+                "Date Created": pd.to_datetime(
+                    [reporting_date, reporting_date, reporting_date, reporting_date]
+                ),
+                "Unit Name": ["Mid-Plains CC", "Canteen East", "Morrison South", "Rutgers Newark"],
+                "Item Description": [
+                    "Breaded beef thin slice raw",
+                    "Canola oil 35 lb",
+                    "Tomato ketchup pouches",
+                    "Crab cake patty",
+                ],
             }
-        ),
-        Automation_Recommendation=lambda df: df["Health Category"].replace(
-            {
-                "At Risk": "Escalate timeline and request owner update",
-                "Watch": "Refresh milestone status",
-                "On Hold": "Check dependency owner",
-                "Complete": "Archive record",
-                "On Track": "No action needed",
-                "Not Started": "Assign kickoff owner",
-            }
-        ),
-    )
+        )
 
-    workflow["Due Date"] = workflow["Target Date"].fillna(pd.Timestamp(reporting_date))
+    workflow["Date Created"] = normalize_date(workflow["Date Created"])
+    workflow["Usage"] = normalize_percent(workflow["Usage"])
+    workflow["Selected"] = False
     workflow["Last Saved"] = pd.Timestamp(reporting_date)
     workflow["Last Sync"] = pd.Timestamp(reporting_date)
-    workflow["Selected"] = False
-    workflow["Needs Review"] = workflow["Health Category"].isin(["At Risk", "Watch"])
+    workflow["Queue Bucket"] = workflow["BuySmart Action"].fillna("Unassigned").replace("", "Unassigned")
+    workflow["Needs Review"] = workflow["Status"].fillna("").astype(str).str.contains("review", case=False) | workflow[
+        "Exception Flag"
+    ].fillna("").astype(str).eq("Y")
+    workflow["Analyst Notes"] = workflow["Comments / Notes"].fillna("")
 
-    return workflow[
-        [
-            "Selected",
-            "Row_ID",
-            "Initiative",
-            "Workstream",
-            "Owner",
-            "Queue",
-            "Workflow_Status",
-            "Priority",
-            "Health Category",
-            "Percent Complete",
-            "Due Date",
-            "Next Milestone Date",
-            "Needs Review",
-            "Automation_Recommendation",
-            "Status Summary",
-            "Last Sync",
-            "Last Saved",
-        ]
-    ].rename(
-        columns={
-            "Row_ID": "Row ID",
-            "Health Category": "Health",
-            "Percent Complete": "% Complete",
-            "Status Summary": "Operator Notes",
-        }
-    )
+    ordered_columns = [
+        "Selected",
+        "Case #",
+        "Request Type",
+        "Business",
+        "Division",
+        "Sector",
+        "Vendor",
+        "Unit Name",
+        "Item Description",
+        "Usage",
+        "VA / Stocking Criteria",
+        "APL Indicator",
+        "Pantry Indicator",
+        "K12 Indicator",
+        "In CAT",
+        "On MOG",
+        "Cannot Add Not in Stock",
+        "DIN",
+        "Conversion DIN",
+        "Manufacturer",
+        "Brand",
+        "Parent Category",
+        "Category",
+        "Subcategory",
+        "Reason for Request",
+        "1x / Permanent",
+        "Action",
+        "If In Stock Action",
+        "BuySmart Action",
+        "Analyst Notes",
+        "Assignment",
+        "Status",
+        "Exception Flag",
+        "Rule Applied",
+        "Override Reason",
+        "Date Created",
+        "Queue Bucket",
+        "Needs Review",
+        "Last Sync",
+        "Last Saved",
+    ]
+    return ensure_columns(workflow, ordered_columns)[ordered_columns]
 
 
 def apply_workflow_quick_action(workflow_df: pd.DataFrame, action: str, reporting_date: datetime.date) -> tuple[pd.DataFrame, int]:
@@ -429,29 +504,25 @@ def apply_workflow_quick_action(workflow_df: pd.DataFrame, action: str, reportin
     selected_mask = updated["Selected"].fillna(False)
     affected = int(selected_mask.sum())
 
-    if action == "Mark selected for review":
-        updated.loc[selected_mask, "Workflow_Status"] = "Pending Review"
+    if action == "Assign to analyst queue":
+        updated.loc[selected_mask, "Assignment"] = "Analyst Queue"
+        updated.loc[selected_mask, "Status"] = "In Review"
+        updated.loc[selected_mask, "Queue Bucket"] = "Analyst Queue"
+        updated.loc[selected_mask, "Rule Applied"] = "Assigned by queue rule"
+    elif action == "Flag as exception":
+        updated.loc[selected_mask, "Exception Flag"] = "Y"
+        updated.loc[selected_mask, "Status"] = "Exception Review"
         updated.loc[selected_mask, "Needs Review"] = True
-        updated.loc[selected_mask, "Automation_Recommendation"] = "Manager review queued"
-    elif action == "Apply SLA +3 days":
-        updated.loc[selected_mask, "Due Date"] = pd.to_datetime(updated.loc[selected_mask, "Due Date"], errors="coerce") + pd.Timedelta(days=3)
-        updated.loc[selected_mask, "Automation_Recommendation"] = "Due date shifted by automation"
-    elif action == "Normalize healthy items":
-        healthy_mask = selected_mask & updated["Health"].isin(["On Track", "Complete"])
-        updated.loc[healthy_mask, "Workflow_Status"] = "Ready to Save"
-        updated.loc[healthy_mask, "Needs Review"] = False
-        updated.loc[healthy_mask, "Automation_Recommendation"] = "Healthy item normalized"
-        affected = int(healthy_mask.sum())
-    elif action == "Auto-assign queue owners":
-        queue_owner_map = {
-            "Exceptions": "PMO Escalations",
-            "Manager Review": "Program Manager",
-            "Dependency Hold": "Dependency Lead",
-            "Archive": "Operations Analyst",
-            "Active Workflow": "Workflow Coordinator",
-        }
-        updated.loc[selected_mask, "Owner"] = updated.loc[selected_mask, "Queue"].map(queue_owner_map).fillna(updated.loc[selected_mask, "Owner"])
-        updated.loc[selected_mask, "Automation_Recommendation"] = "Owner auto-assigned from queue rule"
+        updated.loc[selected_mask, "Rule Applied"] = "Exception routing"
+    elif action == "Recommend stocked alternative":
+        updated.loc[selected_mask, "If In Stock Action"] = "Use stocked item"
+        updated.loc[selected_mask, "BuySmart Action"] = "Conversion Recommended"
+        updated.loc[selected_mask, "Rule Applied"] = "Stocked alternative suggestion"
+    elif action == "Approve selected requests":
+        updated.loc[selected_mask, "BuySmart Action"] = "Approved"
+        updated.loc[selected_mask, "Status"] = "Ready to Save"
+        updated.loc[selected_mask, "Needs Review"] = False
+        updated.loc[selected_mask, "Rule Applied"] = "Approval automation"
 
     updated.loc[selected_mask, "Last Sync"] = pd.Timestamp(reporting_date)
     return updated, affected
@@ -675,14 +746,26 @@ def render_scorecard_view(
     )
 
 
-def render_workflow_wireframe(data: ScorecardData, reporting_date: datetime.date) -> None:
+def render_workflow_wireframe(data: ScorecardData, reporting_date: datetime.date, uploaded_file) -> None:
     st.subheader("Workflow and dashboard wireframe")
     st.caption(
-        "Concept view for an operations UI: editable queue, bulk quick actions, session-backed draft saves, and dashboard rollups."
+        "Analyst-facing queue for recurring request maintenance: editable rows, bulk quick actions, draft saves, and workload rollups."
     )
 
+    workflow_source = None
+    source_key = data.source_name
+    if uploaded_file is not None:
+        workflow_source = load_workflow_sheet(uploaded_file)
+        source_key = uploaded_file.name
+
+    if st.session_state.get("workflow_source_key") != source_key:
+        st.session_state.workflow_drafts = build_workflow_seed(workflow_source, data.portfolio, reporting_date)
+        st.session_state.workflow_saved = st.session_state.workflow_drafts.copy()
+        st.session_state.workflow_last_save = pd.Timestamp(reporting_date)
+        st.session_state.workflow_action_count = 0
+        st.session_state.workflow_source_key = source_key
     if "workflow_drafts" not in st.session_state:
-        st.session_state.workflow_drafts = build_workflow_seed(data.portfolio, data.milestones, reporting_date)
+        st.session_state.workflow_drafts = build_workflow_seed(workflow_source, data.portfolio, reporting_date)
     if "workflow_saved" not in st.session_state:
         st.session_state.workflow_saved = st.session_state.workflow_drafts.copy()
     if "workflow_last_save" not in st.session_state:
@@ -695,33 +778,33 @@ def render_workflow_wireframe(data: ScorecardData, reporting_date: datetime.date
     top_cols = st.columns([1.3, 1.1, 1.1, 1.1])
     selected_rows = int(workflow_df["Selected"].fillna(False).sum())
     review_rows = int(workflow_df["Needs Review"].fillna(False).sum())
-    ready_rows = int((workflow_df["Workflow_Status"] == "Ready to Save").sum())
+    exception_rows = int(workflow_df["Exception Flag"].fillna("").astype(str).eq("Y").sum())
     top_cols[0].metric("Queue volume", len(workflow_df), delta=f"{review_rows} need review")
-    top_cols[1].metric("Selected rows", selected_rows, delta=f"{ready_rows} ready to save")
+    top_cols[1].metric("Selected rows", selected_rows, delta=f"{exception_rows} exceptions")
     top_cols[2].metric("Automated updates", st.session_state.workflow_action_count)
     top_cols[3].metric("Last save", st.session_state.workflow_last_save.strftime("%b %d, %I:%M %p"))
 
     dashboard_left, dashboard_right = st.columns([1.2, 0.8])
-    queue_rollup = workflow_df.groupby(["Queue", "Priority"]).size().reset_index(name="Rows")
+    queue_rollup = workflow_df.groupby(["BuySmart Action", "Status"]).size().reset_index(name="Rows")
     queue_chart = (
         alt.Chart(queue_rollup)
         .mark_bar()
         .encode(
             x=alt.X("Rows:Q", title="Rows"),
-            y=alt.Y("Queue:N", sort="-x"),
-            color=alt.Color("Priority:N", scale=alt.Scale(range=["#b23a48", "#d88c2d", "#497174"])),
-            tooltip=["Queue", "Priority", "Rows"],
+            y=alt.Y("BuySmart Action:N", sort="-x"),
+            color=alt.Color("Status:N", scale=alt.Scale(range=["#b23a48", "#d88c2d", "#497174", "#6c757d"])),
+            tooltip=["BuySmart Action", "Status", "Rows"],
         )
     )
     dashboard_left.altair_chart(queue_chart, use_container_width=True)
 
     dashboard_right.markdown(
         """
-        **Quick action model**
-        - Analysts make inline edits directly in the workflow grid.
-        - Automation applies queue-level updates to the selected rows.
-        - Save commits the current draft state for downstream processing.
-        - Dashboard cards show what changed and what still needs attention.
+        **Analyst workflow**
+        - Analysts work directly in request attributes, decision fields, and notes.
+        - Quick actions apply repeatable rule-based updates to the selected cases.
+        - Save captures the current draft state before export or downstream processing.
+        - Dashboard metrics show review load, exceptions, and action distribution.
         """
     )
 
@@ -729,10 +812,10 @@ def render_workflow_wireframe(data: ScorecardData, reporting_date: datetime.date
     action = control_cols[0].selectbox(
         "Quick action",
         options=[
-            "Mark selected for review",
-            "Apply SLA +3 days",
-            "Normalize healthy items",
-            "Auto-assign queue owners",
+            "Assign to analyst queue",
+            "Flag as exception",
+            "Recommend stocked alternative",
+            "Approve selected requests",
         ],
     )
     control_cols[1].caption("Use the checkbox column to target rows before running an automation.")
@@ -743,20 +826,32 @@ def render_workflow_wireframe(data: ScorecardData, reporting_date: datetime.date
         workflow_df,
         use_container_width=True,
         hide_index=True,
-        height=460,
+        height=520,
         column_config={
             "Selected": st.column_config.CheckboxColumn("Select"),
-            "Row ID": st.column_config.TextColumn("Row ID", disabled=True),
-            "Initiative": st.column_config.TextColumn("Initiative", disabled=True),
-            "Workstream": st.column_config.TextColumn("Workstream", disabled=True),
-            "% Complete": st.column_config.NumberColumn("% Complete", min_value=0, max_value=100, format="%d"),
-            "Due Date": st.column_config.DateColumn("Due Date"),
-            "Next Milestone Date": st.column_config.DateColumn("Next Milestone"),
+            "Case #": st.column_config.TextColumn("Case #", disabled=True),
+            "Request Type": st.column_config.SelectboxColumn("Request Type", options=["PRF", "SORF", "SRF"]),
+            "Usage": st.column_config.NumberColumn("Usage", min_value=0, format="%d"),
+            "VA / Stocking Criteria": st.column_config.SelectboxColumn("VA / Stocking Criteria", options=["", "Y", "N"]),
+            "APL Indicator": st.column_config.SelectboxColumn("APL Indicator", options=["", "Y", "N"]),
+            "Pantry Indicator": st.column_config.SelectboxColumn("Pantry Indicator", options=["", "Y", "N"]),
+            "K12 Indicator": st.column_config.SelectboxColumn("K12 Indicator", options=["", "Y", "N"]),
+            "In CAT": st.column_config.SelectboxColumn("In CAT", options=["", "Y", "N"]),
+            "On MOG": st.column_config.SelectboxColumn("On MOG", options=["", "Y", "N"]),
+            "1x / Permanent": st.column_config.SelectboxColumn("1x / Permanent", options=["One-Time", "Permanent", ""]),
+            "Action": st.column_config.TextColumn("Action"),
+            "If In Stock Action": st.column_config.TextColumn("If In Stock Action"),
+            "BuySmart Action": st.column_config.TextColumn("BuySmart Action"),
+            "Analyst Notes": st.column_config.TextColumn("Comments / Notes"),
+            "Assignment": st.column_config.TextColumn("Assignment"),
+            "Status": st.column_config.TextColumn("Status"),
+            "Exception Flag": st.column_config.SelectboxColumn("Exception Flag", options=["N", "Y", ""]),
             "Needs Review": st.column_config.CheckboxColumn("Needs Review"),
+            "Date Created": st.column_config.DateColumn("Date Created", disabled=True),
             "Last Sync": st.column_config.DateColumn("Last Sync", disabled=True),
             "Last Saved": st.column_config.DateColumn("Last Saved", disabled=True),
         },
-        disabled=["Row ID", "Initiative", "Workstream", "Last Sync", "Last Saved"],
+        disabled=["Case #", "Date Created", "Last Sync", "Last Saved"],
     )
 
     st.session_state.workflow_drafts = edited_workflow.copy()
@@ -851,7 +946,7 @@ with st.sidebar:
     lookahead_days = st.slider("Milestone look-ahead (days)", min_value=14, max_value=120, value=45, step=1)
 
 if app_view == "Workflow Wireframe":
-    render_workflow_wireframe(data, reporting_date)
+    render_workflow_wireframe(data, reporting_date, uploaded_file)
 else:
     render_scorecard_view(
         data,
