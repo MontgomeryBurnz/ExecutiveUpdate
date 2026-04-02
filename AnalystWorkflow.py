@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Iterable, Mapping
 
@@ -84,6 +85,8 @@ OUTCOME_REPORT_ORDER = [
     "assigned",
     "unresolved exceptions",
 ]
+
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # ---------------------------------------------------------------------
 # Data loading utilities
@@ -388,6 +391,12 @@ def apply_workflow_quick_action(workflow_df: pd.DataFrame, action: str, reportin
     updated["Request Bucket"] = updated.apply(classify_request_bucket, axis=1)
     updated.loc[selected_mask, "Last Sync"] = pd.Timestamp(reporting_date)
     return updated, affected
+
+
+def is_valid_email(email: str) -> bool:
+    return bool(EMAIL_PATTERN.match(email.strip()))
+
+
 def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> None:
     st.subheader("Workflow Dashboard")
     st.caption(
@@ -414,6 +423,10 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
         st.session_state.workflow_last_save = pd.Timestamp(reporting_date)
     if "workflow_action_count" not in st.session_state:
         st.session_state.workflow_action_count = 0
+    if "workflow_email_recipient" not in st.session_state:
+        st.session_state.workflow_email_recipient = ""
+    if "workflow_email_queue_notice" not in st.session_state:
+        st.session_state.workflow_email_queue_notice = None
 
     workflow_df = st.session_state.workflow_drafts.copy()
     workflow_df["Request Bucket"] = workflow_df.apply(classify_request_bucket, axis=1)
@@ -524,6 +537,43 @@ def render_workflow_dashboard(reporting_date: datetime.date, uploaded_file) -> N
         st.session_state.workflow_last_save = pd.Timestamp(datetime.now())
         st.success("Draft changes saved for this session.")
         st.rerun()
+
+    st.markdown("### Delivery options")
+    delivery_cols = st.columns([1.4, 0.7])
+    recipient_email = delivery_cols[0].text_input(
+        "Recipient email",
+        placeholder="name@company.com",
+        help="Conceptual delivery flow: after inline edits are saved, queue the current saved draft to be emailed to this recipient.",
+        key="workflow_email_recipient",
+    )
+    queue_email_clicked = delivery_cols[1].button("Queue email copy", use_container_width=True)
+
+    if queue_email_clicked:
+        cleaned_email = recipient_email.strip()
+        if not cleaned_email:
+            st.error("Enter an email address before queuing delivery.")
+        elif not is_valid_email(cleaned_email):
+            st.error("Enter a valid email address in the format name@company.com.")
+        else:
+            saved_export = st.session_state.workflow_saved.copy()
+            st.session_state.workflow_email_queue_notice = {
+                "recipient": cleaned_email,
+                "queued_at": datetime.now(),
+                "rows": len(saved_export),
+                "file_name": f"workflow_wireframe_{reporting_date:%Y%m%d}.csv",
+            }
+            st.success(
+                f"Email delivery queued for {cleaned_email}. Conceptually, the saved draft would be sent after analyst edits are finalized."
+            )
+
+    if st.session_state.workflow_email_queue_notice:
+        queue_notice = st.session_state.workflow_email_queue_notice
+        st.info(
+            "Queued email copy: "
+            f"{queue_notice['file_name']} to {queue_notice['recipient']} "
+            f"({queue_notice['rows']} rows queued on {queue_notice['queued_at']:%b %d, %I:%M %p}). "
+            "This UI captures the request; actual SMTP or API delivery still needs to be implemented."
+        )
 
     saved_export = st.session_state.workflow_saved.copy()
     st.download_button(
