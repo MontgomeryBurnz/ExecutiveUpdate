@@ -1147,6 +1147,28 @@ def inject_styles() -> None:
                 background: linear-gradient(90deg, {COLORS["blue"]}, #5b8ef1);
                 color: white;
             }}
+            .program-grid-link {{
+                display: block;
+                width: 100%;
+                text-align: center;
+                text-decoration: none;
+                padding: 0.78rem 0.95rem;
+                border-radius: 1.2rem;
+                background: linear-gradient(180deg, #6f98ec 0%, #4f7fe6 100%);
+                color: white !important;
+                font-size: 0.95rem;
+                font-weight: 800;
+                line-height: 1.2;
+                box-shadow: 0 10px 22px rgba(79,127,230,0.18);
+                border: 1px solid rgba(79,127,230,0.55);
+                transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+            }}
+            .program-grid-link:hover {{
+                color: white !important;
+                filter: brightness(1.02);
+                box-shadow: 0 14px 26px rgba(79,127,230,0.22);
+                transform: translateY(-1px);
+            }}
             @media (max-width: 1100px) {{
                 .metric-strip {{
                     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2177,9 +2199,12 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
                 "At Risk": '<span class="rag-dot rag-red"></span>',
             }.get(str(row["Status"]), '<span class="rag-dot rag-green"></span>')
             milestone_date = pd.to_datetime(row["Milestone Date"]).strftime("%b %d, %Y")
+            program_url = f'?page={quote("Program One-Pager")}&program={quote(str(row["Program"]))}'
             row_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
-            if row_cols[0].button(str(row["Program"]), key=f"portfolio_program_{idx}", use_container_width=True):
-                navigate_to_program(str(row["Program"]))
+            row_cols[0].markdown(
+                f'<a class="program-grid-link" href="{program_url}">{row["Program"]}</a>',
+                unsafe_allow_html=True,
+            )
             row_cols[1].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
             row_cols[2].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
             row_cols[3].markdown(f'<div style="margin-top:0.7rem;">{rag_html}</div>', unsafe_allow_html=True)
