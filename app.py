@@ -34,11 +34,6 @@ PAGES = [
     "Impower Portfolio",
     "Program One-Pager",
     "Weekly Updates",
-    "All Programs",
-    "Roadmap & Milestones",
-    "Risks & Issues",
-    "Action Items",
-    "Trend Analytics",
     "Settings",
     "Help & Support",
 ]
@@ -1402,11 +1397,6 @@ def render_header(page: str, portfolio: str, reporting_date: date) -> None:
         "Impower Portfolio": "Impower Portfolio",
         "Program One-Pager": "Program One-Pager",
         "Weekly Updates": "Weekly Updates",
-        "All Programs": "All Programs",
-        "Roadmap & Milestones": "Roadmap & Milestones",
-        "Risks & Issues": "Risks & Issues",
-        "Action Items": "Action Items",
-        "Trend Analytics": "Trend Analytics",
         "Settings": "Settings",
         "Help & Support": "Help & Support",
     }
@@ -1468,11 +1458,6 @@ def render_app_navigation(current_page: str) -> str:
         "Impower Portfolio",
         "Program One-Pager",
         "Weekly Updates",
-        "All Programs",
-        "Roadmap & Milestones",
-        "Risks & Issues",
-        "Action Items",
-        "Trend Analytics",
         "Settings",
         "Help & Support",
     ]
@@ -2835,16 +2820,6 @@ elif page == "Program One-Pager":
     render_program_one_pager(portfolio, selected_program, portfolio_df, reporting_date)
 elif page == "Weekly Updates":
     render_program_update(portfolio, selected_program, portfolio_df, reporting_date)
-elif page == "All Programs":
-    render_all_programs(portfolio_df)
-elif page == "Roadmap & Milestones":
-    render_roadmap_milestones(portfolio_df)
-elif page == "Risks & Issues":
-    render_risks_issues(portfolio_df)
-elif page == "Action Items":
-    render_action_items(portfolio_df)
-elif page == "Trend Analytics":
-    render_trend_analytics(portfolio_df)
 elif page == "Settings":
     render_settings()
 elif page == "Help & Support":
