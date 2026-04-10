@@ -2,5 +2,4 @@ streamlit
 pandas
 openpyxl
 XlsxWriter
-# Optional for Snowflake export:
-# snowflake-connector-python
+altair
