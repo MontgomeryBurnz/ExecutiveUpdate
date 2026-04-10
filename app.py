@@ -692,8 +692,82 @@ def inject_styles() -> None:
             }}
             .roadmap-grid {{
                 display: grid;
-                gap: 0.75rem;
+                gap: 1.5rem;
             }}
+            .roadmap-quarter-row {{
+                display: flex;
+                gap: 1.8rem;
+                flex-wrap: wrap;
+                margin: 0.6rem 0 1.2rem;
+                font-size: 1.1rem;
+                color: #a3a7ad;
+            }}
+            .roadmap-quarter-row .active {{
+                color: #294bb5;
+                font-weight: 800;
+            }}
+            .roadmap-journey {{
+                display: grid;
+                gap: 0.4rem;
+            }}
+            .roadmap-journey-name {{
+                font-size: 1.05rem;
+                font-weight: 800;
+                color: #3f4a58;
+            }}
+            .road-band-wrap {{
+                position: relative;
+                padding-bottom: 2rem;
+            }}
+            .road-band {{
+                display: flex;
+                align-items: stretch;
+                width: 100%;
+                min-height: 3.15rem;
+                border-radius: 999px;
+                background: #eff1f4;
+                overflow: hidden;
+            }}
+            .road-band-segment {{
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.98rem;
+                font-weight: 700;
+                line-height: 1;
+                min-width: 0;
+                white-space: nowrap;
+            }}
+            .road-band-segment:first-child {{
+                border-top-left-radius: 999px;
+                border-bottom-left-radius: 999px;
+            }}
+            .road-band-segment:last-child {{
+                border-top-right-radius: 999px;
+                border-bottom-right-radius: 999px;
+            }}
+            .road-marker {{
+                position: absolute;
+                top: -0.35rem;
+                width: 1rem;
+                height: 4rem;
+                transform: translateX(-50%);
+                border-radius: 2px;
+            }}
+            .road-marker-ok {{ background: #294bb5; }}
+            .road-marker-warn {{ background: #ff9800; }}
+            .road-marker-alert {{ background: #f44336; }}
+            .road-marker-label {{
+                position: absolute;
+                top: 3.7rem;
+                transform: translateX(-50%);
+                font-size: 0.82rem;
+                font-weight: 800;
+                white-space: nowrap;
+            }}
+            .road-marker-label.marker-ok {{ color: #294bb5; }}
+            .road-marker-label.marker-warn {{ color: #d97800; }}
+            .road-marker-label.marker-alert {{ color: #df2b33; }}
             .roadmap-row {{
                 display: grid;
                 grid-template-columns: 190px repeat(5, minmax(0, 1fr)) 70px;
@@ -724,6 +798,25 @@ def inject_styles() -> None:
                 font-weight: 800;
                 color: {COLORS["muted"]};
                 text-align: right;
+            }}
+            .road-legend {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1rem;
+                margin-top: 1.1rem;
+                color: #737d8a;
+                font-size: 0.92rem;
+            }}
+            .road-legend-item {{
+                display: inline-flex;
+                align-items: center;
+                gap: 0.45rem;
+            }}
+            .road-legend-swatch {{
+                width: 1.05rem;
+                height: 1.05rem;
+                border-radius: 0.4rem;
+                display: inline-block;
             }}
             .milestone-list {{
                 display: grid;
@@ -2132,6 +2225,7 @@ def render_dashboard_roadmap(df: pd.DataFrame) -> None:
         milestone_label = esc(row["Milestone"])
         marker_pos = max(12, min(88, int(row["Progress"])))
         marker_class = "road-marker-alert" if row["Status"] == "At Risk" else ("road-marker-warn" if row["Status"] == "Needs Attention" else "road-marker-ok")
+        label_class = "marker-alert" if row["Status"] == "At Risk" else ("marker-warn" if row["Status"] == "Needs Attention" else "marker-ok")
         segment_html = "".join(
             f'<div class="road-band-segment" style="width:{seg["width"] * 100:.1f}%; background:{seg["bg"]}; color:{seg["fg"]};">{seg["label"]}</div>'
             for seg in segments
@@ -2140,7 +2234,7 @@ def render_dashboard_roadmap(df: pd.DataFrame) -> None:
         if idx < 4:
             marker_html = (
                 f'<div class="road-marker {marker_class}" style="left:{marker_pos}%"></div>'
-                f'<div class="road-marker-label" style="left:{marker_pos}%">{milestone_label}</div>'
+                f'<div class="road-marker-label {label_class}" style="left:{marker_pos}%">{milestone_label}</div>'
             )
         roadmap_rows.append(
             f"""
@@ -2157,11 +2251,22 @@ def render_dashboard_roadmap(df: pd.DataFrame) -> None:
 
     render_html(
         """
-        <div class="dash-card-title">Portfolio Roadmap - FY25</div>
-        <div class="dash-card-heading">Program Timeline</div>
-        <div class="roadmap-quarter-row"><span>Q1 FY25</span><span>Q2 FY25</span><span class="active">Q3 FY25</span><span>Q4 FY25</span><span>Q1 FY26</span></div>
+        <div class="dash-card">
+            <div class="dash-card-title">Portfolio Roadmap - FY25</div>
+            <div class="dash-card-heading">Program Timeline</div>
+            <div class="roadmap-quarter-row"><span>Q1 FY25</span><span>Q2 FY25</span><span class="active">Q3 FY25</span><span>Q4 FY25</span><span>Q1 FY26</span></div>
         """
         + f'<div class="roadmap-grid">{"".join(roadmap_rows)}</div>'
+        + """
+            <div class="road-legend">
+                <span class="road-legend-item"><span class="road-legend-swatch" style="background:#b8c6fb;"></span>Discover</span>
+                <span class="road-legend-item"><span class="road-legend-swatch" style="background:#dcc7fb;"></span>Plan</span>
+                <span class="road-legend-item"><span class="road-legend-swatch" style="background:#294bb5;"></span>Execute</span>
+                <span class="road-legend-item"><span class="road-legend-swatch" style="background:#b7efc7;"></span>Stabilize</span>
+                <span class="road-legend-item"><span class="road-legend-swatch" style="background:#9fe9c4;"></span>Realize Value</span>
+            </div>
+        </div>
+        """
     )
 
 
@@ -2368,8 +2473,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
     left, right = st.columns([1.62, 0.92], gap="large")
     with left:
         render_dashboard_program_grid(df)
-        with st.container(border=True):
-            render_dashboard_roadmap(df)
+        render_dashboard_roadmap(df)
     with right:
         render_dashboard_milestones(df)
         render_dashboard_risks(df)
