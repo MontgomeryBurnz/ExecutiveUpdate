@@ -1648,6 +1648,51 @@ def navigate_to_program(program: str) -> None:
     st.rerun()
 
 
+def weekly_updates_password() -> str | None:
+    try:
+        return str(st.secrets.get("weekly_updates_password", "")).strip()
+    except Exception:
+        return None
+
+
+def weekly_updates_unlocked() -> bool:
+    password = weekly_updates_password()
+    if not password:
+        return False
+    return bool(st.session_state.get("weekly_updates_unlocked", False))
+
+
+def render_weekly_updates_lock() -> None:
+    password = weekly_updates_password()
+    render_html(
+        """
+        <div class="panel-header">
+            <div class="eyebrow">Restricted Access</div>
+            <div class="heading">Weekly Updates</div>
+            <div class="copy">This page is limited to program leads and authorized update owners.</div>
+        </div>
+        """
+    )
+    with st.container(border=True):
+        if not password:
+            st.error("Weekly Updates is locked, but no password has been configured yet in Streamlit secrets.")
+            st.info("Add `weekly_updates_password` in your Streamlit app secrets to enable access.")
+            return
+
+        st.markdown("#### Enter Password")
+        with st.form("weekly_updates_password_form", clear_on_submit=False):
+            entered = st.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter password")
+            submitted = st.form_submit_button("Unlock Weekly Updates", type="primary", use_container_width=True)
+        if submitted:
+            if entered == password:
+                st.session_state["weekly_updates_unlocked"] = True
+                st.success("Weekly Updates unlocked.")
+                st.rerun()
+            else:
+                st.session_state["weekly_updates_unlocked"] = False
+                st.error("Incorrect password.")
+
+
 def timeline_chart(df: pd.DataFrame) -> alt.Chart:
     timeline = df[["Program", "Stage", "Start", "End", "Milestone", "Milestone Date"]].copy()
     return (
@@ -3011,7 +3056,10 @@ if page == "Impower Portfolio":
 elif page == "Program One-Pager":
     render_program_one_pager(portfolio, selected_program, portfolio_df, reporting_date)
 elif page == "Weekly Updates":
-    render_program_update(portfolio, selected_program, portfolio_df, reporting_date)
+    if weekly_updates_unlocked():
+        render_program_update(portfolio, selected_program, portfolio_df, reporting_date)
+    else:
+        render_weekly_updates_lock()
 elif page == "Settings":
     render_settings()
 elif page == "Help & Support":
