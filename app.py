@@ -2297,11 +2297,19 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
     for _, row in df.sort_values(["Milestone Date", "Program"]).iterrows():
         trend = "↑" if row["Status"] == "On Track" else ("!" if row["Status"] == "Needs Attention" else "↓")
         rag_class = "rag-green" if row["Status"] == "On Track" else ("rag-yellow" if row["Status"] == "Needs Attention" else "rag-red")
-        program_link = f"?page={quote('Program One-Pager')}&program={quote(str(row['Program']))}"
+        page_param = quote("Program One-Pager")
+        program_param = quote(str(row["Program"]))
         grid_rows.append(
             f"""
             <tr>
-                <td class="program-cell"><div class="program-name"><a href="{program_link}" target="_top">{esc(row["Program"])}</a></div></td>
+                <td class="program-cell">
+                    <div class="program-name">
+                        <a
+                            href="#"
+                            onclick="window.parent.location.search='page={page_param}&program={program_param}'; return false;"
+                        >{esc(row["Program"])}</a>
+                    </div>
+                </td>
                 <td>{esc(row["Lead"])}</td>
                 <td>{esc(row["Stage"])}</td>
                 <td><span class="rag-dot {rag_class}"></span></td>
