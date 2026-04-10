@@ -2025,29 +2025,46 @@ def dashboard_status_tag(status: str) -> str:
 
 
 def render_dashboard_program_grid(df: pd.DataFrame) -> None:
-    rows = []
-    for _, row in df.sort_values(["Milestone Date", "Program"]).iterrows():
-        milestone_date = row["Milestone Date"].strftime("%b %d, %Y")
-        rows.append(
-            f'<tr>'
-            f'<td><div class="dash-program">{row["Program"]}</div><div class="dash-note">{row["Lead"]}</div></td>'
-            f'<td>{row["Milestone"]}<div class="dash-note">{milestone_date}</div></td>'
-            f'<td>{dashboard_status_tag(row["Status"])}</td>'
-            f'<td class="dash-note">{row["Status Note"]}</td>'
-            f'</tr>'
+    with st.container(border=True):
+        render_html(
+            """
+            <div class="dash-card-title">Portfolio Program Grid</div>
+            <div class="dash-card-heading">Weekly Updates</div>
+            <div class="dash-card-copy">Program, owner, phase, health, progress, next milestone, and current delivery note.</div>
+            """
         )
-    html = (
-        '<div class="dash-card">'
-        '<div class="dash-card-title">Portfolio Program Grid</div>'
-        '<div class="dash-card-heading">Weekly Updates</div>'
-        '<div class="dash-card-copy">Program-level status, next milestone, and current delivery note aligned to the weekly portfolio rhythm.</div>'
-        '<div class="dash-table-wrap"><table class="dash-table"><thead><tr>'
-        '<th>Program</th><th>Next Milestone</th><th>Status</th><th>Status Note</th>'
-        '</tr></thead><tbody>'
-        + "".join(rows)
-        + '</tbody></table></div></div>'
-    )
-    render_html(html)
+        header_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
+        headers = ["Program", "Owner", "Phase", "RAG", "% Done", "Trend", "Next Milestone", "Status Note"]
+        for col, label in zip(header_cols, headers):
+            col.markdown(f'<div class="metric-title" style="margin-bottom:0.2rem;">{label}</div>', unsafe_allow_html=True)
+
+        ordered = df.sort_values(["Milestone Date", "Program"]).reset_index(drop=True)
+        for idx, (_, row) in enumerate(ordered.iterrows()):
+            trend = "↑" if row["Status"] == "On Track" else ("!" if row["Status"] == "Needs Attention" else "↓")
+            rag_html = {
+                "On Track": '<span class="rag-dot rag-green"></span>',
+                "Needs Attention": '<span class="rag-dot rag-yellow"></span>',
+                "At Risk": '<span class="rag-dot rag-red"></span>',
+            }.get(str(row["Status"]), '<span class="rag-dot rag-green"></span>')
+            milestone_date = pd.to_datetime(row["Milestone Date"]).strftime("%b %d, %Y")
+            row_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
+            if row_cols[0].button(str(row["Program"]), key=f"portfolio_program_{idx}", use_container_width=True):
+                st.session_state["selected_program"] = str(row["Program"])
+                st.session_state["sidebar_selected_program"] = str(row["Program"])
+                st.session_state["current_page"] = "Program One-Pager"
+                st.rerun()
+            row_cols[1].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
+            row_cols[2].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
+            row_cols[3].markdown(f'<div style="margin-top:0.7rem;">{rag_html}</div>', unsafe_allow_html=True)
+            row_cols[4].markdown(f'<div class="copy" style="margin-top:0.45rem;">{int(row["Progress"])}%</div>', unsafe_allow_html=True)
+            row_cols[5].markdown(f'<div class="copy" style="margin-top:0.45rem; font-weight:800;">{trend}</div>', unsafe_allow_html=True)
+            row_cols[6].markdown(
+                f'<div class="copy" style="margin-top:0.2rem;"><strong style="color:{COLORS["navy"]};">{row["Milestone"]}</strong><br>{milestone_date}</div>',
+                unsafe_allow_html=True,
+            )
+            row_cols[7].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Status Note"]}</div>', unsafe_allow_html=True)
+            if idx < len(ordered) - 1:
+                st.markdown("<div style='height:1px;background:#e8eef6;margin:0.2rem 0 0.35rem;'></div>", unsafe_allow_html=True)
 
 
 def render_dashboard_milestones(df: pd.DataFrame) -> None:
@@ -2103,31 +2120,45 @@ def render_dashboard_decisions(df: pd.DataFrame) -> None:
 
 
 def render_dashboard_roadmap(df: pd.DataFrame) -> None:
-    stage_order = ["Discovery", "Phase 1", "Phase 2", "Phase 3", "Phase 4"]
-    class_map = {
-        "Discovery": "discovery",
-        "Phase 1": "phase1",
-        "Phase 2": "phase2",
-        "Phase 3": "phase3",
-        "Phase 4": "phase4",
-    }
-    rows = []
-    for _, row in df.sort_values(["Stage", "Program"]).iterrows():
-        pills = []
-        for stage in stage_order:
-            active = row["Stage"] == stage
-            pill_class = class_map[stage] if active else ""
-            label = stage.replace("Phase ", "") if stage != "Discovery" else "Disc"
-            pills.append(f'<div class="roadmap-pill {pill_class}">{label}</div>')
-        rows.append(
-            f'<div class="roadmap-row"><div class="roadmap-name">{row["Program"]}</div>{"".join(pills)}<div class="roadmap-progress">{int(row["Progress"])}%</div></div>'
+    def esc(value: object) -> str:
+        return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    roadmap_rows = []
+    for idx, (_, row) in enumerate(df.sort_values(["Stage", "Program"]).iterrows()):
+        segments = roadmap_stage_segments(str(row["Stage"]), int(row["Progress"]))
+        milestone_label = esc(row["Milestone"])
+        marker_pos = max(12, min(88, int(row["Progress"])))
+        marker_class = "road-marker-alert" if row["Status"] == "At Risk" else ("road-marker-warn" if row["Status"] == "Needs Attention" else "road-marker-ok")
+        segment_html = "".join(
+            f'<div class="road-band-segment" style="width:{seg["width"] * 100:.1f}%; background:{seg["bg"]}; color:{seg["fg"]};">{seg["label"]}</div>'
+            for seg in segments
         )
+        marker_html = ""
+        if idx < 4:
+            marker_html = (
+                f'<div class="road-marker {marker_class}" style="left:{marker_pos}%"></div>'
+                f'<div class="road-marker-label" style="left:{marker_pos}%">{milestone_label}</div>'
+            )
+        roadmap_rows.append(
+            f"""
+            <div class="roadmap-journey">
+                <div class="roadmap-journey-name">{esc(row["Program"])}</div>
+                <div class="road-band-wrap">
+                    <div class="road-band">{segment_html}</div>
+                    {marker_html}
+                </div>
+                <div class="road-progress">{int(row["Progress"])}% complete</div>
+            </div>
+            """
+        )
+
     render_html(
-        '<div class="dash-card" style="margin-top:1rem;">'
-        '<div class="dash-card-title">Portfolio Roadmap - FY25</div>'
-        '<div class="dash-card-heading">Program Timeline</div>'
-        '<div class="dash-card-copy">A phase-based roadmap aligned to the visual structure in the executive render.</div>'
-        '<div class="roadmap-grid">' + "".join(rows) + "</div></div>"
+        """
+        <div class="dash-card-title">Portfolio Roadmap - FY25</div>
+        <div class="dash-card-heading">Program Timeline</div>
+        <div class="roadmap-quarter-row"><span>Q1 FY25</span><span>Q2 FY25</span><span class="active">Q3 FY25</span><span>Q4 FY25</span><span>Q1 FY26</span></div>
+        """
+        + f'<div class="roadmap-grid">{"".join(roadmap_rows)}</div>'
     )
 
 
@@ -2283,765 +2314,64 @@ def roadmap_stage_segments(stage: str, progress: int) -> list[dict[str, object]]
 
 
 def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
-    def esc(value: object) -> str:
-        return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
     total_programs = len(df)
     on_track = int(df["Status"].eq("On Track").sum())
     at_risk = int(df["Status"].eq("At Risk").sum())
     delayed = int(df["Status"].eq("Needs Attention").sum())
     avg_complete = int(round(df["Progress"].mean()))
     decisions_pending = int((~df["Decision Needed"].str.contains("No ", na=False)).sum())
-
-    grid_rows = []
-    for _, row in df.sort_values(["Milestone Date", "Program"]).iterrows():
-        trend = "↑" if row["Status"] == "On Track" else ("!" if row["Status"] == "Needs Attention" else "↓")
-        rag_class = "rag-green" if row["Status"] == "On Track" else ("rag-yellow" if row["Status"] == "Needs Attention" else "rag-red")
-        page_param = quote("Program One-Pager")
-        program_param = quote(str(row["Program"]))
-        grid_rows.append(
-            f"""
-            <tr>
-                <td class="program-cell">
-                    <div class="program-name">
-                        <a
-                            href="#"
-                            onclick="window.top.location.href = window.top.location.origin + window.top.location.pathname + '?page={page_param}&program={program_param}'; return false;"
-                        >{esc(row["Program"])}</a>
-                    </div>
-                </td>
-                <td>{esc(row["Lead"])}</td>
-                <td>{esc(row["Stage"])}</td>
-                <td><span class="rag-dot {rag_class}"></span></td>
-                <td>{int(row["Progress"])}%</td>
-                <td>{trend}</td>
-                <td>{esc(row["Milestone"])}</td>
-                <td class="status-note">{esc(row["Status Note"])}</td>
-            </tr>
-            """
-        )
-
-    roadmap_rows = []
-    for idx, (_, row) in enumerate(df.sort_values(["Stage", "Program"]).iterrows()):
-        segments = roadmap_stage_segments(str(row["Stage"]), int(row["Progress"]))
-        milestone_label = esc(row["Milestone"])
-        marker_pos = max(12, min(88, int(row["Progress"])))
-        marker_class = "road-marker-alert" if row["Status"] == "At Risk" else ("road-marker-warn" if row["Status"] == "Needs Attention" else "road-marker-ok")
-        segment_html = "".join(
-            f'<div class="road-band-segment" style="width:{seg["width"] * 100:.1f}%; background:{seg["bg"]}; color:{seg["fg"]};">{seg["label"]}</div>'
-            for seg in segments
-        )
-        marker_html = ""
-        if idx < 4:
-            marker_html = (
-                f'<div class="road-marker {marker_class}" style="left:{marker_pos}%"></div>'
-                f'<div class="road-marker-label" style="left:{marker_pos}%">{milestone_label}</div>'
-            )
-        roadmap_rows.append(
-            f"""
-            <div class="roadmap-journey">
-                <div class="roadmap-journey-name">{esc(row["Program"])}</div>
-                <div class="road-band-wrap">
-                    <div class="road-band">{segment_html}</div>
-                    {marker_html}
-                </div>
-                <div class="roadmap-progress">{int(row["Progress"])}% complete</div>
+    render_html(
+        """
+        <div class="topbar">
+            <div class="brand-block">
+                <div class="brand-title">Portfolio Command Center</div>
+                <div class="brand-copy">Strategic Program Intelligence</div>
             </div>
-            """
-        )
-
-    milestone_cards = []
-    for _, row in milestone_table(df).iterrows():
-        dt = row["Milestone Date"]
-        status_cls = "prio-high" if row["Status"] == "On Track" else ("prio-medium" if row["Status"] == "Needs Attention" else "prio-low")
-        status_lbl = "High" if row["Status"] == "On Track" else ("Medium" if row["Status"] == "Needs Attention" else "Low")
-        milestone_cards.append(
-            f"""
-            <div class="mile-card">
-                <div class="datebox"><div class="day">{dt.strftime("%d")}</div><div class="mon">{dt.strftime("%b").upper()}</div></div>
-                <div class="mile-copy"><div class="mile-title">{esc(row["Milestone"])}</div><div class="mile-sub">{esc(row["Program"])}</div></div>
-                <div class="prio {status_cls}">{status_lbl}</div>
+            <div class="search-shell">Search programs, milestones, risks...</div>
+            <div class="toolbar-actions">
+                <div class="toolbar-icon">◐</div>
+                <div class="toolbar-icon">◔</div>
+                <div class="toolbar-icon">3</div>
+                <div class="toolbar-icon">⚙</div>
             </div>
-            """
-        )
-
-    risk_cards = []
-    trends = ["Worse", "Stable", "Better", "Stable", "Worse"]
-    trend_classes = ["trend-red", "trend-muted", "trend-green", "trend-muted", "trend-red"]
-    for idx, (_, row) in enumerate(risk_table(df).iterrows()):
-        severity = "High" if int(row["Escalations"]) > 1 or int(row["Open Risks"]) >= 5 else ("Medium" if int(row["Open Risks"]) >= 3 else "Low")
-        risk_cards.append(
-            f"""
-            <div class="risk-card">
-                <div class="risk-top">
-                    <div class="risk-title">{esc(row["Program"])}</div>
-                    <div class="risk-trend {trend_classes[idx % len(trend_classes)]}">{trends[idx % len(trends)]}</div>
+            <div class="profile-shell">
+                <div class="profile-copy">
+                    <div class="profile-name">Marcus Ellison</div>
+                    <div class="profile-role">VP, Transformation Office</div>
                 </div>
-                <div class="risk-meta">Severity: {severity}</div>
-                <div class="risk-meta">Mitigation: {esc(row["Mitigation"])}</div>
-            </div>
-            """
-        )
-
-    decision_rows = []
-    decisions = decision_table(df)
-    for _, row in decisions.iterrows():
-        impact = "High" if row["Priority"] == "Critical" else ("Medium" if row["Priority"] == "High" else "Low")
-        decision_rows.append(
-            f"""
-            <tr>
-                <td>{esc(row["Decision Needed"])}</td>
-                <td>{esc(row["Program"])}</td>
-                <td>{impact}</td>
-                <td>{esc(row["Executive Sponsor"])}</td>
-            </tr>
-            """
-        )
-
-    html = f"""
-    <html>
-    <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-        html, body {{
-            width: 100%;
-            min-height: 100%;
-            overflow-x: hidden;
-        }}
-        * {{
-            box-sizing: border-box;
-        }}
-        body {{
-            margin: 0;
-            background: linear-gradient(180deg, #f6f9fd 0%, #eef3f9 100%);
-            font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            color: #4f6278;
-        }}
-        .page {{
-            width: 100%;
-            max-width: 1520px;
-            margin: 0 auto;
-            padding: 18px 18px 28px;
-        }}
-        .layout {{
-            display: block;
-        }}
-        .rail {{
-            display: none;
-        }}
-        .rail-item {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 11px 12px;
-            border-radius: 14px;
-            color: #94a3b8;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }}
-        .rail-item.active {{
-            background: linear-gradient(180deg, #376fe7 0%, #255ed4 100%);
-            color: white;
-        }}
-        .rail-divider {{
-            height: 1px;
-            background: #dee7f2;
-            margin: 10px 0;
-        }}
-        .content {{
-            display: grid;
-            gap: 16px;
-            min-width: 0;
-        }}
-        .topbar {{
-            display: grid;
-            grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.35fr) auto auto;
-            gap: 16px;
-            align-items: center;
-        }}
-        .brand-title {{
-            font-size: 32px;
-            font-weight: 800;
-            color: #304a68;
-            line-height: 1.05;
-            letter-spacing: -0.03em;
-        }}
-        .brand-sub {{
-            font-size: 13px;
-            color: #8b9db2;
-            margin-top: 6px;
-        }}
-        .search {{
-            background: rgba(255,255,255,0.92);
-            border: 1px solid #d9e3f0;
-            border-radius: 12px;
-            padding: 14px 18px;
-            color: #9aaabc;
-            font-size: 14px;
-            min-width: 0;
-        }}
-        .icon-row {{
-            display: flex;
-            gap: 8px;
-        }}
-        .icon {{
-            width: 34px;
-            height: 34px;
-            border: 1px solid #d9e3f0;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.92);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #91a2b7;
-            font-size: 13px;
-            font-weight: 700;
-        }}
-        .profile {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: flex-end;
-        }}
-        .profile-copy {{
-            text-align: right;
-        }}
-        .profile-name {{
-            font-size: 13px;
-            font-weight: 800;
-            color: #304a68;
-        }}
-        .profile-role {{
-            font-size: 11px;
-            color: #8b9db2;
-        }}
-        .avatar {{
-            width: 36px;
-            height: 36px;
-            border-radius: 999px;
-            background: linear-gradient(180deg, #376fe7, #255ed4);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 800;
-        }}
-        .hero {{
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 18px;
-        }}
-        .hero-title {{
-            font-size: clamp(30px, 3vw, 38px);
-            font-weight: 800;
-            color: #304a68;
-            letter-spacing: -0.02em;
-        }}
-        .hero-meta {{
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-top: 8px;
-            color: #7f91a6;
-            font-size: 13px;
-        }}
-        .updated {{
-            background: rgba(46,139,111,0.12);
-            color: #2e8b6f;
-            border-radius: 999px;
-            padding: 4px 8px;
-            font-weight: 700;
-        }}
-        .actions {{
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-        }}
-        .ghost-btn, .primary-btn {{
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 14px;
-            font-weight: 700;
-            white-space: nowrap;
-        }}
-        .ghost-btn {{
-            background: rgba(255,255,255,0.92);
-            border: 1px solid #d9e3f0;
-            color: #52667b;
-        }}
-        .primary-btn {{
-            background: linear-gradient(180deg, #376fe7 0%, #255ed4 100%);
-            color: white;
-        }}
-        .kpis {{
-            display: grid;
-            grid-template-columns: repeat(5, minmax(140px, 1fr));
-            gap: 12px;
-        }}
-        .kpi {{
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-            border: 1px solid #d9e3f0;
-            border-radius: 18px;
-            padding: 16px;
-        }}
-        .kpi-label {{
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #93a3b6;
-            font-weight: 800;
-        }}
-        .kpi-value {{
-            margin-top: 10px;
-            font-size: 40px;
-            line-height: 1;
-            font-weight: 800;
-            color: #304a68;
-        }}
-        .kpi-delta {{
-            margin-top: 8px;
-            font-size: 12px;
-            color: #8ea0b5;
-        }}
-        .main-grid {{
-            display: grid;
-            grid-template-columns: minmax(0, 1.58fr) minmax(320px, 0.94fr);
-            gap: 16px;
-        }}
-        .stack {{
-            display: grid;
-            gap: 16px;
-            min-width: 0;
-        }}
-        .card {{
-            background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-            border: 1px solid #d9e3f0;
-            border-radius: 22px;
-            padding: 18px;
-            box-shadow: 0 12px 32px rgba(22,50,79,0.04);
-        }}
-        .card-eyebrow {{
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            color: #376fe7;
-            font-weight: 800;
-            margin-bottom: 8px;
-        }}
-        .card-title {{
-            font-size: 18px;
-            font-weight: 800;
-            color: #304a68;
-        }}
-        .card-copy {{
-            margin-top: 6px;
-            color: #8093a9;
-            font-size: 14px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 14px;
-            table-layout: fixed;
-        }}
-        th {{
-            text-align: left;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #94a3b8;
-            padding: 12px 10px;
-            border-bottom: 1px solid #e6edf5;
-        }}
-        td {{
-            padding: 14px 10px;
-            border-bottom: 1px solid #edf2f8;
-            font-size: 14px;
-            color: #516478;
-            vertical-align: top;
-        }}
-        tr:last-child td {{ border-bottom: none; }}
-        .program-name {{
-            color: #305da8;
-            font-weight: 800;
-        }}
-        .program-name a {{
-            color: #305da8;
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-        }}
-        .program-name a:hover {{
-            color: #1e4fa6;
-            border-bottom-color: #1e4fa6;
-        }}
-        .status-note {{
-            color: #6f8298;
-        }}
-        .rag-dot {{
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-        }}
-        .rag-green {{ background: #2e8b6f; }}
-        .rag-yellow {{ background: #d3a23c; }}
-        .rag-red {{ background: #cf5c5c; }}
-        .section-pill {{
-            background: linear-gradient(180deg, #6c95ea 0%, #4f80e6 100%);
-            color: white;
-            border-radius: 16px;
-            text-align: center;
-            padding: 16px 14px;
-            font-size: 16px;
-            font-weight: 800;
-            margin-bottom: 14px;
-        }}
-        .roadmap-quarter-row {{
-            display: flex;
-            gap: 30px;
-            flex-wrap: wrap;
-            margin: 8px 0 18px;
-            font-size: 22px;
-            color: #a3a7ad;
-        }}
-        .roadmap-quarter-row .active {{
-            color: #294bb5;
-            font-weight: 800;
-        }}
-        .roadmap-grid {{
-            display: grid;
-            gap: 24px;
-            margin-top: 12px;
-        }}
-        .roadmap-journey-name {{
-            font-size: 18px;
-            font-weight: 800;
-            color: #3f4a58;
-            margin-bottom: 8px;
-        }}
-        .road-band-wrap {{
-            position: relative;
-            padding-bottom: 32px;
-        }}
-        .road-band {{
-            display: flex;
-            align-items: stretch;
-            width: 100%;
-            height: 42px;
-            border-radius: 999px;
-            background: #f0f2f5;
-            overflow: hidden;
-        }}
-        .road-band-segment {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: 700;
-        }}
-        .road-band-segment:first-child {{
-            border-top-left-radius: 999px;
-            border-bottom-left-radius: 999px;
-        }}
-        .road-band-segment:last-child {{
-            border-top-right-radius: 999px;
-            border-bottom-right-radius: 999px;
-        }}
-        .road-marker {{
-            position: absolute;
-            top: -8px;
-            width: 18px;
-            height: 56px;
-            transform: translateX(-50%);
-            border-radius: 2px;
-        }}
-        .road-marker-ok {{ background: #294bb5; }}
-        .road-marker-warn {{ background: #ff9800; }}
-        .road-marker-alert {{ background: #f44336; }}
-        .road-marker-label {{
-            position: absolute;
-            top: 58px;
-            transform: translateX(-50%);
-            font-size: 12px;
-            font-weight: 800;
-            white-space: nowrap;
-            color: #d97800;
-        }}
-        .road-progress {{
-            margin-top: 2px;
-            text-align: right;
-            color: #8092a8;
-            font-size: 12px;
-            font-weight: 800;
-        }}
-        .mile-list, .risk-list {{
-            display: grid;
-            gap: 12px;
-        }}
-        .mile-card, .risk-card {{
-            background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-            border: 1px solid #e1e9f3;
-            border-radius: 18px;
-            padding: 14px;
-        }}
-        .mile-card {{
-            display: grid;
-            grid-template-columns: 52px 1fr auto;
-            gap: 12px;
-            align-items: center;
-        }}
-        .datebox {{
-            width: 52px;
-            height: 52px;
-            border-radius: 14px;
-            border: 1px solid #dce5f1;
-            background: #f2f6fb;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }}
-        .day {{
-            font-size: 22px;
-            font-weight: 800;
-            color: #304a68;
-            line-height: 1;
-        }}
-        .mon {{
-            margin-top: 4px;
-            font-size: 10px;
-            color: #8ea0b5;
-            font-weight: 800;
-            letter-spacing: 0.12em;
-        }}
-        .mile-title {{
-            font-size: 15px;
-            font-weight: 800;
-            color: #304a68;
-        }}
-        .mile-sub {{
-            margin-top: 4px;
-            font-size: 12px;
-            color: #8ea0b5;
-        }}
-        .prio {{
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 800;
-        }}
-        .prio-high {{ color: #2e8b6f; background: rgba(46,139,111,0.12); }}
-        .prio-medium {{ color: #d3a23c; background: rgba(211,162,60,0.14); }}
-        .prio-low {{ color: #cf5c5c; background: rgba(207,92,92,0.13); }}
-        .risk-top {{
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            align-items: start;
-        }}
-        .risk-title {{
-            font-size: 15px;
-            font-weight: 800;
-            color: #304a68;
-        }}
-        .risk-meta {{
-            margin-top: 6px;
-            font-size: 12px;
-            color: #8697ac;
-        }}
-        .trend-red {{ color: #cf5c5c; font-size: 12px; font-weight: 800; }}
-        .trend-green {{ color: #2e8b6f; font-size: 12px; font-weight: 800; }}
-        .trend-muted {{ color: #8ea0b5; font-size: 12px; font-weight: 800; }}
-        .decision-table th, .decision-table td {{
-            font-size: 13px;
-        }}
-        .table-scroll {{
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
-        }}
-        @media (max-width: 1280px) {{
-            .topbar {{
-                grid-template-columns: minmax(240px, 0.95fr) minmax(260px, 1fr) auto;
-            }}
-            .profile {{
-                grid-column: 1 / -1;
-            }}
-            .kpis {{
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }}
-            .main-grid {{
-                grid-template-columns: 1fr;
-            }}
-        }}
-        @media (max-width: 1080px) {{
-            .page {{
-                padding: 16px 14px 24px;
-            }}
-            .topbar {{
-                grid-template-columns: 1fr;
-            }}
-            .profile {{
-                justify-content: flex-start;
-            }}
-            .hero {{
-                flex-direction: column;
-            }}
-            .actions {{
-                justify-content: flex-start;
-            }}
-            .kpis {{
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }}
-        }}
-        @media (max-width: 760px) {{
-            .page {{
-                padding: 12px 10px 20px;
-            }}
-            .brand-title {{
-                font-size: 24px;
-            }}
-            .kpis {{
-                grid-template-columns: 1fr;
-            }}
-            .mile-card {{
-                grid-template-columns: 52px 1fr;
-            }}
-            .prio {{
-                grid-column: 1 / -1;
-                justify-self: start;
-            }}
-            .road-row {{
-                grid-template-columns: 1fr;
-            }}
-            .road-progress {{
-                text-align: left;
-            }}
-            table,
-            thead,
-            tbody,
-            th,
-            td,
-            tr {{
-                display: block;
-            }}
-            thead {{
-                display: none;
-            }}
-            tbody tr {{
-                padding: 10px 0;
-                border-bottom: 1px solid #edf2f8;
-            }}
-            td {{
-                border-bottom: none;
-                padding: 6px 0;
-            }}
-        }}
-    </style>
-    </head>
-    <body>
-        <div class="page">
-            <div class="layout">
-                <div class="rail">
-                    <div class="rail-item active">Impower Portfolio</div>
-                    <div class="rail-item">Program One-Pager</div>
-                    <div class="rail-item">Weekly Update Entry</div>
-                    <div class="rail-divider"></div>
-                    <div class="rail-item">All Programs</div>
-                    <div class="rail-item">Roadmap &amp; Milestones</div>
-                    <div class="rail-item">Risks &amp; Issues</div>
-                    <div class="rail-item">Action Items</div>
-                    <div class="rail-item">Trend Analytics</div>
-                    <div class="rail-item">Settings</div>
-                    <div class="rail-item">Help &amp; Support</div>
-                </div>
-                <div class="content">
-                    <div class="topbar">
-                        <div>
-                            <div class="brand-title">Portfolio Command Center</div>
-                            <div class="brand-sub">Strategic Program Intelligence</div>
-                        </div>
-                        <div class="search">Search programs, milestones, risks...</div>
-                        <div class="icon-row"><div class="icon">◐</div><div class="icon">◔</div><div class="icon">3</div><div class="icon">⚙</div></div>
-                        <div class="profile">
-                            <div class="profile-copy"><div class="profile-name">Marcus Ellison</div><div class="profile-role">VP, Transformation Office</div></div>
-                            <div class="avatar">ME</div>
-                        </div>
-                    </div>
-                    <div class="hero">
-                        <div>
-                            <div class="hero-title">{PORTFOLIO_NAME}</div>
-                            <div class="hero-meta"><span>Week Ending Sep 20, 2026</span><span class="updated">Updated 12 min ago</span></div>
-                        </div>
-                        <div class="actions"><div class="ghost-btn">Export PDF</div><div class="primary-btn">Share Report</div></div>
-                    </div>
-                    <div class="kpis">
-                        <div class="kpi"><div class="kpi-label">Total Programs</div><div class="kpi-value">{total_programs}</div></div>
-                        <div class="kpi"><div class="kpi-label">At Risk</div><div class="kpi-value">{at_risk}</div></div>
-                        <div class="kpi"><div class="kpi-label">Delayed</div><div class="kpi-value">{delayed}</div></div>
-                        <div class="kpi"><div class="kpi-label">Avg % Complete</div><div class="kpi-value">{avg_complete}%</div></div>
-                        <div class="kpi"><div class="kpi-label">Decisions Pending</div><div class="kpi-value">{decisions_pending}</div></div>
-                    </div>
-                    <div class="main-grid">
-                        <div class="stack">
-                            <div class="card">
-                                <div class="card-eyebrow">Portfolio Program Grid</div>
-                                <div class="card-title">Weekly Updates</div>
-                                <div class="card-copy">Program, owner, trend, progress, next milestone, and current status note.</div>
-                                <div class="table-scroll">
-                                <table>
-                                    <thead>
-                                        <tr><th>Program</th><th>Owner</th><th>Phase</th><th>RAG</th><th>% Done</th><th>Trend</th><th>Next Milestone</th><th>Status Note</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {''.join(grid_rows)}
-                                    </tbody>
-                                </table>
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Portfolio Roadmap - FY25</div>
-                                <div class="card-title">Program Timeline</div>
-                                <div class="roadmap-quarter-row"><span>Q1 FY25</span><span>Q2 FY25</span><span class="active">Q3 FY25</span><span>Q4 FY25</span><span>Q1 FY26</span></div>
-                                <div class="roadmap-grid">{''.join(roadmap_rows)}</div>
-                            </div>
-                        </div>
-                        <div class="stack">
-                            <div class="card">
-                                <div class="section-pill">Upcoming Milestones</div>
-                                <div class="mile-list">{''.join(milestone_cards)}</div>
-                            </div>
-                            <div class="card">
-                                <div class="section-pill">Key Risks Across Portfolio</div>
-                                <div class="risk-list">{''.join(risk_cards)}</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="section-pill">Executive Action Items / Decisions Needed</div>
-                        <div class="table-scroll">
-                        <table class="decision-table">
-                            <thead>
-                                <tr><th>Decision Statement</th><th>Owning Program</th><th>Impact if Delayed</th><th>Owner</th></tr>
-                            </thead>
-                            <tbody>
-                                {''.join(decision_rows) if decision_rows else '<tr><td colspan="4">No executive decisions are currently outstanding.</td></tr>'}
-                            </tbody>
-                        </table>
-                        </div>
-                    </div>
-                </div>
+                <div class="profile-avatar">ME</div>
             </div>
         </div>
-    </body>
-    </html>
-    """
-    components.html(html, height=2200, scrolling=True)
+        <div class="dashboard-title-block">
+            <div class="dashboard-title">FY25 Strategic Transformation Portfolio</div>
+            <div class="dashboard-meta"><span>Week Ending Sep 20, 2026</span><span class="update-pill">Updated 12 min ago</span></div>
+        </div>
+        """,
+    )
+    kpi_cols = st.columns(5, gap="large")
+    kpi_data = [
+        ("Total Programs", total_programs),
+        ("At Risk", at_risk),
+        ("Delayed", delayed),
+        ("Avg % Complete", f"{avg_complete}%"),
+        ("Decisions Pending", decisions_pending),
+    ]
+    for col, (label, value) in zip(kpi_cols, kpi_data):
+        col.markdown(
+            f'<div class="dash-kpi"><div class="dash-kpi-name">{label}</div><div class="dash-kpi-value">{value}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    left, right = st.columns([1.62, 0.92], gap="large")
+    with left:
+        render_dashboard_program_grid(df)
+        with st.container(border=True):
+            render_dashboard_roadmap(df)
+    with right:
+        render_dashboard_milestones(df)
+        render_dashboard_risks(df)
+
+    render_dashboard_decisions(df)
 
 
 def render_program_update(portfolio: str, program: str, df: pd.DataFrame, reporting_date: date) -> None:
