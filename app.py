@@ -2423,7 +2423,7 @@ def roadmap_stage_segments(stage: str, progress: int) -> list[dict[str, object]]
     return segments
 
 
-def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
+def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date) -> None:
     total_programs = len(df)
     on_track = int(df["Status"].eq("On Track").sum())
     at_risk = int(df["Status"].eq("At Risk").sum())
@@ -2431,7 +2431,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
     avg_complete = int(round(df["Progress"].mean()))
     decisions_pending = int((~df["Decision Needed"].str.contains("No ", na=False)).sum())
     render_html(
-        """
+        f"""
         <div class="topbar">
             <div class="brand-block">
                 <div class="brand-title">Portfolio Command Center</div>
@@ -2454,7 +2454,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
         </div>
         <div class="dashboard-title-block">
             <div class="dashboard-title">FY25 Strategic Transformation Portfolio</div>
-            <div class="dashboard-meta"><span>Week Ending Sep 20, 2026</span><span class="update-pill">Updated 12 min ago</span></div>
+            <div class="dashboard-meta"><span>Week Ending {reporting_date:%b %d, %Y}</span><span class="update-pill">Updated 12 min ago</span></div>
         </div>
         """,
     )
@@ -2773,7 +2773,7 @@ with st.sidebar:
 render_header(page, portfolio, reporting_date)
 
 if page == "Impower Portfolio":
-    render_dashboard(portfolio, portfolio_df)
+    render_dashboard(portfolio, portfolio_df, reporting_date)
 elif page == "Program One-Pager":
     render_program_one_pager(portfolio, selected_program, portfolio_df, reporting_date)
 elif page == "Weekly Updates":
