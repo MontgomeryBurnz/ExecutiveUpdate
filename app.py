@@ -2862,7 +2862,7 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
         for col in cols:
             frame[col] = pd.to_datetime(frame[col], errors="coerce")
 
-    actions = st.columns([1.0, 1.0, 0.9, 0.9], gap="large")
+    actions = st.columns([1.0, 1.0, 0.95], gap="large")
     updated_df = df.copy()
     row_idx = updated_df.index[updated_df["Program"] == program][0]
     top_milestone = milestones.sort_values("Forecast Date").iloc[0] if not milestones.empty else None
@@ -2912,10 +2912,6 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
         clear_milestone_editor_state(portfolio, program)
         save_program_details(portfolio, program, default_program_details(row, reporting_date))
         st.success("Program entry reset to the starter template.")
-        st.rerun()
-    if actions[3].button("Reset Portfolio", use_container_width=True):
-        save_state(portfolio, load_portfolio_dataframe(portfolio))
-        st.success("Portfolio data reset to the starter template.")
         st.rerun()
 
 
