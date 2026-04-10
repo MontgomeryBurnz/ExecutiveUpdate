@@ -1366,6 +1366,129 @@ def render_milestone_editor(portfolio: str, program: str, milestones: pd.DataFra
     return pd.DataFrame(rows, columns=["Milestone Name", "Planned Date", "Forecast Date", "Status", "Comment"])
 
 
+def render_risk_editor(portfolio: str, program: str, risks: pd.DataFrame) -> pd.DataFrame:
+    prefix = f"risk_{portfolio}_{program}"
+    count_key = f"{prefix}_count"
+    if count_key not in st.session_state:
+        seed = risks.reset_index(drop=True)
+        st.session_state[count_key] = len(seed)
+        for idx, row in seed.iterrows():
+            st.session_state[f"{prefix}_severity_{idx}"] = row["Severity"]
+            st.session_state[f"{prefix}_title_{idx}"] = row["Title"]
+            st.session_state[f"{prefix}_owner_{idx}"] = row["Owner"]
+            st.session_state[f"{prefix}_target_{idx}"] = pd.to_datetime(row["Target Date"]).date()
+            st.session_state[f"{prefix}_description_{idx}"] = row["Description"]
+            st.session_state[f"{prefix}_mitigation_{idx}"] = row["Mitigation Plan"]
+
+    add_col, _ = st.columns([0.24, 1.76])
+    if add_col.button("Add Risk", key=f"{prefix}_add", use_container_width=True):
+        idx = st.session_state[count_key]
+        today = date.today()
+        st.session_state[f"{prefix}_severity_{idx}"] = "Medium"
+        st.session_state[f"{prefix}_title_{idx}"] = ""
+        st.session_state[f"{prefix}_owner_{idx}"] = ""
+        st.session_state[f"{prefix}_target_{idx}"] = today
+        st.session_state[f"{prefix}_description_{idx}"] = ""
+        st.session_state[f"{prefix}_mitigation_{idx}"] = ""
+        st.session_state[count_key] = idx + 1
+        st.rerun()
+
+    header_cols = st.columns([0.6, 1.15, 0.9, 0.95, 1.7, 1.7, 0.28], gap="small")
+    headers = ["Severity", "Risk Title", "Owner", "Target Date", "Description", "Mitigation", ""]
+    for col, label in zip(header_cols, headers):
+        col.markdown(f'<div class="metric-title" style="margin-bottom:0.35rem;">{label}</div>', unsafe_allow_html=True)
+
+    rows = []
+    current_count = st.session_state[count_key]
+    for idx in range(current_count):
+        cols = st.columns([0.6, 1.15, 0.9, 0.95, 1.7, 1.7, 0.28], gap="small")
+        severity = cols[0].selectbox("Severity", ["High", "Medium", "Low", "DEP"], key=f"{prefix}_severity_{idx}", label_visibility="collapsed")
+        title = cols[1].text_input("Risk Title", key=f"{prefix}_title_{idx}", label_visibility="collapsed")
+        owner = cols[2].text_input("Owner", key=f"{prefix}_owner_{idx}", label_visibility="collapsed")
+        target = cols[3].date_input("Target Date", key=f"{prefix}_target_{idx}", label_visibility="collapsed")
+        description = cols[4].text_input("Description", key=f"{prefix}_description_{idx}", label_visibility="collapsed")
+        mitigation = cols[5].text_input("Mitigation", key=f"{prefix}_mitigation_{idx}", label_visibility="collapsed")
+        remove = cols[6].button("X", key=f"{prefix}_remove_{idx}", use_container_width=True)
+        if remove:
+            for move_idx in range(idx, current_count - 1):
+                for field in ["severity", "title", "owner", "target", "description", "mitigation"]:
+                    st.session_state[f"{prefix}_{field}_{move_idx}"] = st.session_state.get(f"{prefix}_{field}_{move_idx + 1}")
+            for field in ["severity", "title", "owner", "target", "description", "mitigation"]:
+                st.session_state.pop(f"{prefix}_{field}_{current_count - 1}", None)
+            st.session_state[count_key] = current_count - 1
+            st.rerun()
+        if str(title).strip():
+            rows.append(
+                {
+                    "Severity": severity,
+                    "Title": title,
+                    "Owner": owner,
+                    "Target Date": pd.to_datetime(target),
+                    "Description": description,
+                    "Mitigation Plan": mitigation,
+                }
+            )
+
+    return pd.DataFrame(rows, columns=["Severity", "Title", "Owner", "Target Date", "Description", "Mitigation Plan"])
+
+
+def render_decision_editor(portfolio: str, program: str, decisions: pd.DataFrame) -> pd.DataFrame:
+    prefix = f"decision_{portfolio}_{program}"
+    count_key = f"{prefix}_count"
+    if count_key not in st.session_state:
+        seed = decisions.reset_index(drop=True)
+        st.session_state[count_key] = len(seed)
+        for idx, row in seed.iterrows():
+            st.session_state[f"{prefix}_topic_{idx}"] = row["Decision Topic"]
+            st.session_state[f"{prefix}_required_{idx}"] = pd.to_datetime(row["Required By"]).date()
+            st.session_state[f"{prefix}_impact_{idx}"] = row["Impact if Unresolved"]
+            st.session_state[f"{prefix}_recommendation_{idx}"] = row["Recommendation"]
+
+    add_col, _ = st.columns([0.28, 1.72])
+    if add_col.button("Add Request", key=f"{prefix}_add", use_container_width=True):
+        idx = st.session_state[count_key]
+        st.session_state[f"{prefix}_topic_{idx}"] = ""
+        st.session_state[f"{prefix}_required_{idx}"] = date.today()
+        st.session_state[f"{prefix}_impact_{idx}"] = ""
+        st.session_state[f"{prefix}_recommendation_{idx}"] = ""
+        st.session_state[count_key] = idx + 1
+        st.rerun()
+
+    header_cols = st.columns([1.45, 0.85, 1.55, 1.3, 0.28], gap="small")
+    headers = ["Decision Topic", "Required By", "Impact if Unresolved", "Recommendation", ""]
+    for col, label in zip(header_cols, headers):
+        col.markdown(f'<div class="metric-title" style="margin-bottom:0.35rem;">{label}</div>', unsafe_allow_html=True)
+
+    rows = []
+    current_count = st.session_state[count_key]
+    for idx in range(current_count):
+        cols = st.columns([1.45, 0.85, 1.55, 1.3, 0.28], gap="small")
+        topic = cols[0].text_input("Decision Topic", key=f"{prefix}_topic_{idx}", label_visibility="collapsed")
+        required = cols[1].date_input("Required By", key=f"{prefix}_required_{idx}", label_visibility="collapsed")
+        impact = cols[2].text_input("Impact if Unresolved", key=f"{prefix}_impact_{idx}", label_visibility="collapsed")
+        recommendation = cols[3].text_input("Recommendation", key=f"{prefix}_recommendation_{idx}", label_visibility="collapsed")
+        remove = cols[4].button("X", key=f"{prefix}_remove_{idx}", use_container_width=True)
+        if remove:
+            for move_idx in range(idx, current_count - 1):
+                for field in ["topic", "required", "impact", "recommendation"]:
+                    st.session_state[f"{prefix}_{field}_{move_idx}"] = st.session_state.get(f"{prefix}_{field}_{move_idx + 1}")
+            for field in ["topic", "required", "impact", "recommendation"]:
+                st.session_state.pop(f"{prefix}_{field}_{current_count - 1}", None)
+            st.session_state[count_key] = current_count - 1
+            st.rerun()
+        if str(topic).strip():
+            rows.append(
+                {
+                    "Decision Topic": topic,
+                    "Required By": pd.to_datetime(required),
+                    "Impact if Unresolved": impact,
+                    "Recommendation": recommendation,
+                }
+            )
+
+    return pd.DataFrame(rows, columns=["Decision Topic", "Required By", "Impact if Unresolved", "Recommendation"])
+
+
 def status_class(status: str) -> str:
     return {
         "On Track": "status-green",
@@ -2427,132 +2550,120 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
     render_html(
         f"""
         <div class="panel-header">
-            <div class="eyebrow">Weekly Update</div>
-            <div class="heading">Draft <span style="color:{COLORS["muted"]}; font-size:0.95rem; font-weight:700;">· Auto-saved 2 min ago</span></div>
-            <div class="copy"><strong>{program}</strong> for <strong>{portfolio}</strong>. Submitted data will update the portfolio dashboard and executive one-pager automatically.</div>
+            <div class="eyebrow">Weekly Update Entry</div>
+            <div class="heading">{program} <span style="color:{COLORS["muted"]}; font-size:0.95rem; font-weight:700;">· Draft</span></div>
+            <div class="copy"><strong>{portfolio}</strong>. Submitted data will update the Impower Portfolio and Program One-Pager automatically.</div>
         </div>
         """
     )
 
     hero_cols = st.columns([1.15, 1.0, 0.85, 0.85], gap="large")
-    hero_cols[0].markdown(f'<div class="metric-card"><div class="metric-title">Program Owner</div><div class="metric-number" style="font-size:1.18rem;">{row["Executive Sponsor"]}</div></div>', unsafe_allow_html=True)
+    hero_cols[0].markdown(f'<div class="metric-card"><div class="metric-title">Program Owner</div><div class="metric-number" style="font-size:1.18rem;">{row["Lead"]}</div><div class="metric-note">Executive Sponsor: {row["Executive Sponsor"]}</div></div>', unsafe_allow_html=True)
     hero_cols[1].markdown(f'<div class="metric-card"><div class="metric-title">Reporting Cycle</div><div class="metric-number" style="font-size:1.18rem;">#24</div><div class="metric-note">{cycle_label(reporting_date)}</div></div>', unsafe_allow_html=True)
     hero_cols[2].markdown(f'<div class="metric-card"><div class="metric-title">Week Ending</div><div class="metric-number" style="font-size:1.18rem;">{pd.to_datetime(details["week_ending"]):%b %d, %Y}</div></div>', unsafe_allow_html=True)
-    hero_cols[3].markdown('<div class="metric-card"><div class="metric-title">Submission Guidance</div><div class="metric-note" style="margin-top:0.55rem;">Use concise, report-ready language. This page is the source for the portfolio and executive views.</div></div>', unsafe_allow_html=True)
+    hero_cols[3].markdown('<div class="metric-card"><div class="metric-title">Submission Guidance</div><div class="metric-note" style="margin-top:0.55rem;">Use concise, report-ready language. This is the source of truth for leadership reporting.</div></div>', unsafe_allow_html=True)
 
-    main_left, main_right = st.columns([1.55, 0.95], gap="large")
+    render_html(
+        """
+        <div class="sub-bar">Submitted data will update the portfolio dashboard and executive one-pager immediately after save/submit.</div>
+        """
+    )
 
-    with main_left:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+    with st.container(border=True):
         st.markdown('<div class="eyebrow">Core Status Inputs</div><div class="heading">Weekly Program Snapshot</div>', unsafe_allow_html=True)
-        status_cols = st.columns(2, gap="large")
+        status_cols = st.columns([0.95, 0.95, 0.95, 1.15], gap="large")
         with status_cols[0]:
             week_ending = st.date_input("Week Ending Date", value=pd.to_datetime(details["week_ending"]).date(), key=f"we_{portfolio}_{program}")
-            current_phase = st.selectbox("Current Phase", ["Discovery", "Phase 1", "Phase 2", "Phase 3", "Phase 4"], index=["Discovery", "Phase 1", "Phase 2", "Phase 3", "Phase 4"].index(details["current_phase"]), key=f"phase_{portfolio}_{program}")
             overall_status = st.selectbox("Overall Status", ["On Track", "Needs Attention", "At Risk"], index=["On Track", "Needs Attention", "At Risk"].index(details["overall_status"]), key=f"status_{portfolio}_{program}")
         with status_cols[1]:
+            current_phase = st.selectbox("Current Phase", ["Discovery", "Phase 1", "Phase 2", "Phase 3", "Phase 4"], index=["Discovery", "Phase 1", "Phase 2", "Phase 3", "Phase 4"].index(details["current_phase"]), key=f"phase_{portfolio}_{program}")
             percent_complete = st.slider("% Complete", min_value=0, max_value=100, value=int(details["percent_complete"]), key=f"pct_{portfolio}_{program}")
-            trend = st.radio("Trend vs Prior Week", ["Up", "Flat", "Down"], index=["Up", "Flat", "Down"].index(details["trend"]), horizontal=True, key=f"trend_{portfolio}_{program}")
-            st.caption("Directional movement since the prior reporting cycle.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with status_cols[2]:
+            trend = st.radio("Trend vs Prior Week", ["Up", "Flat", "Down"], index=["Up", "Flat", "Down"].index(details["trend"]), key=f"trend_{portfolio}_{program}")
+        with status_cols[3]:
+            st.markdown('<div class="metric-title" style="margin-bottom:0.5rem;">Status Guidance</div>', unsafe_allow_html=True)
+            render_html(
+                """
+                <div class="copy">Use concise executive language. Capture the delta from the prior week, the most important blockers, and any decision requests that leadership needs to act on.</div>
+                """
+            )
 
-        st.markdown('<div class="card" style="margin-top:1rem;">', unsafe_allow_html=True)
+    with st.container(border=True):
         st.markdown('<div class="eyebrow">Milestone Updates</div><div class="heading">Milestone Tracker</div>', unsafe_allow_html=True)
         milestones = render_milestone_editor(portfolio, program, details["milestones"])
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('<div class="card" style="margin-top:1rem;">', unsafe_allow_html=True)
-        st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">What Leadership Will Read</div>', unsafe_allow_html=True)
-        accomplishments = st.text_area("Key Accomplishments This Week", value=str(details["accomplishments"]), height=110, key=f"acc_{portfolio}_{program}", help="Concise, report-ready language preferred. This appears in the executive summary.")
-        next_steps = st.text_area("Planned Next Steps", value=str(details["next_steps"]), height=110, key=f"next_{portfolio}_{program}", help="Focus on actions planned for the next 1-2 weeks.")
-        dependencies = st.text_area("Dependencies & Blockers", value=str(details["dependencies"]), height=110, key=f"deps_{portfolio}_{program}", help="Highlight cross-program and external dependencies.")
-        executive_summary = st.text_area("Executive Summary Notes", value=str(details["executive_summary"]), height=130, key=f"sum_{portfolio}_{program}", help="2-3 sentences for the executive one-pager headline.")
-        st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Key Accomplishments This Week</div>', unsafe_allow_html=True)
+        accomplishments = st.text_area("Key Accomplishments This Week", value=str(details["accomplishments"]), height=130, key=f"acc_{portfolio}_{program}", label_visibility="collapsed")
 
-        st.markdown('<div class="card" style="margin-top:1rem;">', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Dependencies & Blockers</div>', unsafe_allow_html=True)
+        dependencies = st.text_area("Dependencies & Blockers", value=str(details["dependencies"]), height=130, key=f"deps_{portfolio}_{program}", label_visibility="collapsed")
+
+    narrative_bottom = st.columns(2, gap="large")
+    with narrative_bottom[0]:
+        with st.container(border=True):
+            st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Planned Next Steps</div>', unsafe_allow_html=True)
+            next_steps = st.text_area("Planned Next Steps", value=str(details["next_steps"]), height=130, key=f"next_{portfolio}_{program}", label_visibility="collapsed")
+    with narrative_bottom[1]:
+        with st.container(border=True):
+            st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Executive Summary Notes</div>', unsafe_allow_html=True)
+            executive_summary = st.text_area("Executive Summary Notes", value=str(details["executive_summary"]), height=130, key=f"sum_{portfolio}_{program}", label_visibility="collapsed")
+
+    with st.container(border=True):
         st.markdown('<div class="eyebrow">Risks & Mitigations</div><div class="heading">Risk Register</div>', unsafe_allow_html=True)
-        risks = st.data_editor(
-            details["risks"],
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
-            height=260,
-            key=f"risks_{portfolio}_{program}",
-            column_config={
-                "Severity": st.column_config.SelectboxColumn("Severity", options=["High", "Medium", "Low", "DEP"]),
-                "Title": st.column_config.TextColumn("Title"),
-                "Owner": st.column_config.TextColumn("Owner"),
-                "Target Date": st.column_config.DateColumn("Target Date"),
-                "Description": st.column_config.TextColumn("Description", width="large"),
-                "Mitigation Plan": st.column_config.TextColumn("Mitigation Plan", width="large"),
-            },
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        risks = render_risk_editor(portfolio, program, details["risks"])
 
-        st.markdown('<div class="card" style="margin-top:1rem;">', unsafe_allow_html=True)
+    with st.container(border=True):
         st.markdown('<div class="eyebrow">Leadership Decision Requests</div><div class="heading">Actionable Executive Requests</div>', unsafe_allow_html=True)
-        decisions = st.data_editor(
-            details["decisions"],
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
-            height=210,
-            key=f"decisions_{portfolio}_{program}",
-            column_config={
-                "Decision Topic": st.column_config.TextColumn("Decision Topic", width="large"),
-                "Required By": st.column_config.DateColumn("Required By"),
-                "Impact if Unresolved": st.column_config.TextColumn("Impact if Unresolved", width="large"),
-                "Recommendation": st.column_config.TextColumn("Recommendation", width="large"),
-            },
-        )
-        st.caption("Decision requests appear as action items on the executive reporting dashboard.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        decisions = render_decision_editor(portfolio, program, details["decisions"])
+        st.caption("Decision requests will appear as action items on the executive-facing pages.")
 
-    with main_right:
-        st.markdown('<div class="section-bar">Executive Preview</div>', unsafe_allow_html=True)
-        preview_status = one_pager_status_label(overall_status)
-        preview_status_cls = status_class(overall_status)
-        top_risks = risks.head(2)
-        open_decisions = decisions[~decisions["Decision Topic"].str.contains("No executive decision", na=False)].head(2)
-        risk_lines = "".join(
-            f"<li><strong>{row_item['Severity']}:</strong> {row_item['Title']}</li>"
-            for _, row_item in top_risks.iterrows()
-        ) or "<li>No active risks captured.</li>"
-        decision_lines = "".join(
-            f"<li>{row_item['Decision Topic']} - by {pd.to_datetime(row_item['Required By']):%b %d}</li>"
-            for _, row_item in open_decisions.iterrows()
-        ) or "<li>No active executive requests.</li>"
-        render_html(
-            f"""
-            <div class="card">
-                <div class="eyebrow">How Your Update Will Appear In Reporting</div>
-                <div class="heading">{program}</div>
+    preview_status = one_pager_status_label(overall_status)
+    preview_status_cls = status_class(overall_status)
+    top_risks = risks.head(3)
+    open_decisions = decisions[~decisions["Decision Topic"].str.contains("No executive decision", na=False)].head(3)
+    risk_lines = "".join(
+        f"<li><strong>{row_item['Severity']}:</strong> {row_item['Title']} - {row_item['Mitigation Plan']}</li>"
+        for _, row_item in top_risks.iterrows()
+    ) or "<li>No active risks captured.</li>"
+    decision_lines = "".join(
+        f"<li>{row_item['Decision Topic']} - by {pd.to_datetime(row_item['Required By']):%b %d}</li>"
+        for _, row_item in open_decisions.iterrows()
+    ) or "<li>No active executive requests.</li>"
+
+    preview_cols = st.columns([1.15, 0.85], gap="large")
+    with preview_cols[0]:
+        with st.container(border=True):
+            st.markdown('<div class="eyebrow">Executive Preview</div><div class="heading">Leadership Readout</div>', unsafe_allow_html=True)
+            render_html(
+                f"""
                 <div class="status-pill {preview_status_cls}">{preview_status}</div>
-                <div class="copy"><strong>{percent_complete}% Complete</strong> · {trend} trend · Week ending {week_ending:%b %d, %Y}</div>
+                <div class="copy" style="margin-top:0.85rem;"><strong>{program}</strong> is at <strong>{percent_complete}% complete</strong> with a <strong>{trend}</strong> trend for the week ending {week_ending:%b %d, %Y}.</div>
                 <div class="eyebrow" style="margin-top:1rem;">Executive Summary</div>
                 <div class="copy">{executive_summary}</div>
-                <div class="eyebrow" style="margin-top:1rem;">Key Risks</div>
-                <ul class="mini-list">{risk_lines}</ul>
-                <div class="eyebrow" style="margin-top:1rem;">Decisions Needed</div>
+                <div class="eyebrow" style="margin-top:1rem;">Decision Requests</div>
                 <ul class="mini-list">{decision_lines}</ul>
-            </div>
-            """
-        )
+                """
+            )
+    with preview_cols[1]:
         required_missing = sum(
             [
                 1 if not executive_summary.strip() else 0,
                 1 if milestones.empty else 0,
+                1 if not accomplishments.strip() else 0,
             ]
         )
-        render_html(
-            f"""
-            <div class="card" style="margin-top:1rem;">
+        with st.container(border=True):
+            render_html(
+                f"""
                 <div class="eyebrow">Submission Readiness</div>
                 <div class="heading">{required_missing} required fields need attention</div>
-                <div class="copy">Save draft to persist current inputs. Submit update when the preview reflects the message you want executives to read.</div>
-            </div>
-            """
-        )
+                <div class="copy">Save draft to persist current inputs. Submit update once the executive summary, milestones, risks, and decisions reflect what leadership should read this cycle.</div>
+                <div class="eyebrow" style="margin-top:1rem;">Top Risks</div>
+                <ul class="mini-list">{risk_lines}</ul>
+                """
+            )
 
     for frame, cols in [
         (milestones, ["Planned Date", "Forecast Date"]),
@@ -2562,7 +2673,7 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
         for col in cols:
             frame[col] = pd.to_datetime(frame[col], errors="coerce")
 
-    actions = st.columns([0.95, 0.95, 1.15, 1.55], gap="large")
+    actions = st.columns([1.0, 1.0, 0.9, 0.9], gap="large")
     updated_df = df.copy()
     row_idx = updated_df.index[updated_df["Program"] == program][0]
     top_milestone = milestones.sort_values("Forecast Date").iloc[0] if not milestones.empty else None
