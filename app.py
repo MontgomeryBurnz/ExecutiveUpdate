@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import re
 from textwrap import dedent
 from urllib.parse import quote
@@ -2423,7 +2423,7 @@ def roadmap_stage_segments(stage: str, progress: int) -> list[dict[str, object]]
     return segments
 
 
-def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date) -> None:
+def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, refreshed_at: datetime) -> None:
     total_programs = len(df)
     on_track = int(df["Status"].eq("On Track").sum())
     at_risk = int(df["Status"].eq("At Risk").sum())
@@ -2454,7 +2454,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date) -> 
         </div>
         <div class="dashboard-title-block">
             <div class="dashboard-title">FY25 Strategic Transformation Portfolio</div>
-            <div class="dashboard-meta"><span>Week Ending {reporting_date:%b %d, %Y}</span><span class="update-pill">Updated 12 min ago</span></div>
+            <div class="dashboard-meta"><span>Week Ending {reporting_date:%b %d, %Y}</span><span class="update-pill">Refreshed {refreshed_at:%I:%M %p}</span></div>
         </div>
         """,
     )
@@ -2765,6 +2765,7 @@ with st.sidebar:
     selected_program = st.session_state["selected_program"]
     portfolio = PROGRAM_TO_PORTFOLIO[selected_program]
     reporting_date = st.date_input("Reporting Date", date.today())
+    refreshed_at = datetime.now()
     portfolio_df = ensure_state(portfolio)
     page = render_app_navigation(st.session_state["current_page"])
     st.markdown("### Context")
@@ -2773,7 +2774,7 @@ with st.sidebar:
 render_header(page, portfolio, reporting_date)
 
 if page == "Impower Portfolio":
-    render_dashboard(portfolio, portfolio_df, reporting_date)
+    render_dashboard(portfolio, portfolio_df, reporting_date, refreshed_at)
 elif page == "Program One-Pager":
     render_program_one_pager(portfolio, selected_program, portfolio_df, reporting_date)
 elif page == "Weekly Updates":
