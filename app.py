@@ -2306,7 +2306,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
                     <div class="program-name">
                         <a
                             href="#"
-                            onclick="window.parent.location.search='page={page_param}&program={program_param}'; return false;"
+                            onclick="window.top.location.href = window.top.location.origin + window.top.location.pathname + '?page={page_param}&program={program_param}'; return false;"
                         >{esc(row["Program"])}</a>
                     </div>
                 </td>
