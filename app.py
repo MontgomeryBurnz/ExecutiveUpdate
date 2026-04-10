@@ -2546,31 +2546,196 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, ref
 def render_program_update(portfolio: str, program: str, df: pd.DataFrame, reporting_date: date) -> None:
     row = df.loc[df["Program"] == program].iloc[0]
     details = ensure_program_details(portfolio, program, reporting_date, row)
+    current_status = st.session_state.get(f"status_{portfolio}_{program}", details["overall_status"])
+    current_phase_value = st.session_state.get(f"phase_{portfolio}_{program}", details["current_phase"])
+    current_progress = int(st.session_state.get(f"pct_{portfolio}_{program}", details["percent_complete"]))
+    current_trend = st.session_state.get(f"trend_{portfolio}_{program}", details["trend"])
+
+    st.markdown(
+        """
+        <style>
+            .weekly-hero {
+                background: #0f1837;
+                color: white;
+                border-radius: 22px;
+                padding: 20px 24px 18px;
+                box-shadow: 0 18px 42px rgba(8,16,40,0.18);
+                margin-bottom: 1rem;
+            }
+            .weekly-hero-top {
+                display: grid;
+                grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.95fr);
+                gap: 24px;
+                align-items: start;
+            }
+            .weekly-hero-title {
+                font-size: 1.9rem;
+                font-weight: 800;
+                letter-spacing: -0.03em;
+                color: #ffffff;
+            }
+            .weekly-hero-sub {
+                margin-top: 0.45rem;
+                font-size: 1rem;
+                color: #9bb2e8;
+            }
+            .weekly-hero-owners {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1.6rem;
+                margin-top: 1rem;
+                color: #a8b6d7;
+                font-size: 0.92rem;
+            }
+            .weekly-hero-owners strong {
+                color: white;
+                margin-left: 0.35rem;
+            }
+            .weekly-hero-metrics {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 1rem;
+            }
+            .weekly-hero-label {
+                font-size: 0.74rem;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: #9aa9cc;
+                font-weight: 700;
+            }
+            .weekly-hero-value {
+                margin-top: 0.45rem;
+                font-size: 1.12rem;
+                font-weight: 800;
+                color: white;
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+            }
+            .weekly-status-dot {
+                width: 14px;
+                height: 14px;
+                border-radius: 999px;
+                display: inline-block;
+            }
+            .weekly-status-dot.green { background: #22c55e; }
+            .weekly-status-dot.amber { background: #f59e0b; }
+            .weekly-status-dot.red { background: #ef4444; }
+            .weekly-hero-divider {
+                height: 1px;
+                background: rgba(255,255,255,0.16);
+                margin: 1rem 0 0.85rem;
+            }
+            .weekly-hero-note {
+                color: #d9e2f8;
+                font-size: 0.92rem;
+                line-height: 1.45;
+            }
+            .weekly-section-title {
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+                font-size: 1rem;
+                font-weight: 800;
+                color: #1a2741;
+                margin-bottom: 0.85rem;
+            }
+            .weekly-section-icon {
+                color: #2f5bd2;
+                font-size: 0.95rem;
+            }
+            .weekly-section-copy {
+                color: #67788d;
+                margin: -0.15rem 0 0.9rem;
+                line-height: 1.42;
+            }
+            div[data-testid="stVerticalBlockBorderWrapper"] {
+                border: 1px solid #d8e1ed !important;
+                border-top: 1px solid #d8e1ed !important;
+                border-radius: 22px !important;
+                background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+                box-shadow: 0 12px 28px rgba(20,42,71,0.04);
+            }
+            .stTextArea textarea,
+            .stTextInput input,
+            .stDateInput input,
+            .stNumberInput input,
+            [data-baseweb="select"] > div,
+            [data-baseweb="input"] > div,
+            .stDateInput [data-baseweb="input"] > div,
+            .stMultiSelect [data-baseweb="select"] > div {
+                background: #ffffff !important;
+                border: 1px solid #d8e1ed !important;
+                color: #23384f !important;
+                border-radius: 12px !important;
+                box-shadow: none !important;
+            }
+            .stTextArea textarea:focus,
+            .stTextInput input:focus,
+            .stDateInput input:focus,
+            .stNumberInput input:focus {
+                border-color: #8aa7e6 !important;
+                box-shadow: 0 0 0 1px #8aa7e6 !important;
+            }
+            .stRadio [role="radiogroup"] label {
+                background: #ffffff;
+                border: 1px solid #d8e1ed;
+                border-radius: 12px;
+                padding: 0.52rem 0.75rem;
+            }
+            .stRadio [role="radiogroup"] label[data-checked="true"] {
+                background: #f5f8ff;
+                border-color: #9bb3ea;
+                box-shadow: none;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    status_dot_class = {
+        "On Track": "green",
+        "Needs Attention": "amber",
+        "At Risk": "red",
+    }.get(str(current_status), "green")
+    status_label = one_pager_status_label(str(current_status))
 
     render_html(
         f"""
-        <div class="panel-header">
-            <div class="eyebrow">Weekly Update Entry</div>
-            <div class="heading">{program} <span style="color:{COLORS["muted"]}; font-size:0.95rem; font-weight:700;">· Draft</span></div>
-            <div class="copy"><strong>{portfolio}</strong>. Submitted data will update the Impower Portfolio and Program One-Pager automatically.</div>
+        <div class="weekly-hero">
+            <div class="weekly-hero-top">
+                <div>
+                    <div class="weekly-hero-title">{program}</div>
+                    <div class="weekly-hero-sub">Weekly Update Entry for {portfolio}</div>
+                    <div class="weekly-hero-owners">
+                        <div>Executive Sponsor:<strong>{row["Executive Sponsor"]}</strong></div>
+                        <div>Program Lead:<strong>{row["Lead"]}</strong></div>
+                        <div>Reporting Week:<strong>{pd.to_datetime(details["week_ending"]):%b %d, %Y}</strong></div>
+                    </div>
+                </div>
+                <div class="weekly-hero-metrics">
+                    <div>
+                        <div class="weekly-hero-label">Overall Status</div>
+                        <div class="weekly-hero-value"><span class="weekly-status-dot {status_dot_class}"></span>{status_label}</div>
+                    </div>
+                    <div>
+                        <div class="weekly-hero-label">% Complete</div>
+                        <div class="weekly-hero-value">{current_progress}%</div>
+                    </div>
+                    <div>
+                        <div class="weekly-hero-label">Current Phase</div>
+                        <div class="weekly-hero-value">{current_phase_value}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="weekly-hero-divider"></div>
+            <div class="weekly-hero-note">Submitted data will update the Impower Portfolio and Program One-Pager automatically. Use concise, executive-ready language and capture only the information leaders need to act on.</div>
         </div>
         """
     )
 
-    hero_cols = st.columns([1.15, 1.0, 0.85, 0.85], gap="large")
-    hero_cols[0].markdown(f'<div class="metric-card"><div class="metric-title">Program Owner</div><div class="metric-number" style="font-size:1.18rem;">{row["Lead"]}</div><div class="metric-note">Executive Sponsor: {row["Executive Sponsor"]}</div></div>', unsafe_allow_html=True)
-    hero_cols[1].markdown(f'<div class="metric-card"><div class="metric-title">Reporting Cycle</div><div class="metric-number" style="font-size:1.18rem;">#24</div><div class="metric-note">{cycle_label(reporting_date)}</div></div>', unsafe_allow_html=True)
-    hero_cols[2].markdown(f'<div class="metric-card"><div class="metric-title">Week Ending</div><div class="metric-number" style="font-size:1.18rem;">{pd.to_datetime(details["week_ending"]):%b %d, %Y}</div></div>', unsafe_allow_html=True)
-    hero_cols[3].markdown('<div class="metric-card"><div class="metric-title">Submission Guidance</div><div class="metric-note" style="margin-top:0.55rem;">Use concise, report-ready language. This is the source of truth for leadership reporting.</div></div>', unsafe_allow_html=True)
-
-    render_html(
-        """
-        <div class="sub-bar">Submitted data will update the portfolio dashboard and executive one-pager immediately after save/submit.</div>
-        """
-    )
-
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Core Status Inputs</div><div class="heading">Weekly Program Snapshot</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">▣</span><span>Core Status Inputs</span></div><div class="weekly-section-copy">Capture the current program snapshot for this reporting cycle.</div>')
         status_cols = st.columns([0.95, 0.95, 0.95, 1.15], gap="large")
         with status_cols[0]:
             week_ending = st.date_input("Week Ending Date", value=pd.to_datetime(details["week_ending"]).date(), key=f"we_{portfolio}_{program}")
@@ -2589,33 +2754,33 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
             )
 
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Milestone Updates</div><div class="heading">Milestone Tracker</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">☰</span><span>Milestone Updates</span></div>')
         milestones = render_milestone_editor(portfolio, program, details["milestones"])
 
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Key Accomplishments This Week</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">✳</span><span>Key Accomplishments This Week</span></div>')
         accomplishments = st.text_area("Key Accomplishments This Week", value=str(details["accomplishments"]), height=130, key=f"acc_{portfolio}_{program}", label_visibility="collapsed")
 
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Dependencies & Blockers</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">⚠</span><span>Dependencies & Blockers</span></div>')
         dependencies = st.text_area("Dependencies & Blockers", value=str(details["dependencies"]), height=130, key=f"deps_{portfolio}_{program}", label_visibility="collapsed")
 
     narrative_bottom = st.columns(2, gap="large")
     with narrative_bottom[0]:
         with st.container(border=True):
-            st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Planned Next Steps</div>', unsafe_allow_html=True)
+            render_html('<div class="weekly-section-title"><span class="weekly-section-icon">▸</span><span>Planned Next Steps</span></div>')
             next_steps = st.text_area("Planned Next Steps", value=str(details["next_steps"]), height=130, key=f"next_{portfolio}_{program}", label_visibility="collapsed")
     with narrative_bottom[1]:
         with st.container(border=True):
-            st.markdown('<div class="eyebrow">Narrative Inputs</div><div class="heading">Executive Summary Notes</div>', unsafe_allow_html=True)
+            render_html('<div class="weekly-section-title"><span class="weekly-section-icon">▣</span><span>Executive Summary Notes</span></div>')
             executive_summary = st.text_area("Executive Summary Notes", value=str(details["executive_summary"]), height=130, key=f"sum_{portfolio}_{program}", label_visibility="collapsed")
 
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Risks & Mitigations</div><div class="heading">Risk Register</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">⚠</span><span>Risks & Mitigations</span></div>')
         risks = render_risk_editor(portfolio, program, details["risks"])
 
     with st.container(border=True):
-        st.markdown('<div class="eyebrow">Leadership Decision Requests</div><div class="heading">Actionable Executive Requests</div>', unsafe_allow_html=True)
+        render_html('<div class="weekly-section-title"><span class="weekly-section-icon">✎</span><span>Leadership Decision Requests</span></div>')
         decisions = render_decision_editor(portfolio, program, details["decisions"])
         st.caption("Decision requests will appear as action items on the executive-facing pages.")
 
@@ -2635,10 +2800,10 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
     preview_cols = st.columns([1.15, 0.85], gap="large")
     with preview_cols[0]:
         with st.container(border=True):
-            st.markdown('<div class="eyebrow">Executive Preview</div><div class="heading">Leadership Readout</div>', unsafe_allow_html=True)
+            render_html('<div class="weekly-section-title"><span class="weekly-section-icon">▣</span><span>Executive Preview</span></div>')
             render_html(
                 f"""
-                <div class="status-pill {preview_status_cls}">{preview_status}</div>
+                <div class="status-pill {preview_status_cls}" style="margin-top:0;">{preview_status}</div>
                 <div class="copy" style="margin-top:0.85rem;"><strong>{program}</strong> is at <strong>{percent_complete}% complete</strong> with a <strong>{trend}</strong> trend for the week ending {week_ending:%b %d, %Y}.</div>
                 <div class="eyebrow" style="margin-top:1rem;">Executive Summary</div>
                 <div class="copy">{executive_summary}</div>
@@ -2657,8 +2822,8 @@ def render_program_update(portfolio: str, program: str, df: pd.DataFrame, report
         with st.container(border=True):
             render_html(
                 f"""
-                <div class="eyebrow">Submission Readiness</div>
-                <div class="heading">{required_missing} required fields need attention</div>
+                <div class="weekly-section-title"><span class="weekly-section-icon">✓</span><span>Submission Readiness</span></div>
+                <div class="heading" style="font-size:1.18rem;">{required_missing} required fields need attention</div>
                 <div class="copy">Save draft to persist current inputs. Submit update once the executive summary, milestones, risks, and decisions reflect what leadership should read this cycle.</div>
                 <div class="eyebrow" style="margin-top:1rem;">Top Risks</div>
                 <ul class="mini-list">{risk_lines}</ul>
