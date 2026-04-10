@@ -2254,7 +2254,7 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
         render_html(
             """
             <div class="dash-card-title">Portfolio Program Grid</div>
-            <div class="dash-card-heading">Impower Login</div>
+            <div class="dash-card-heading">Weekly Updates</div>
             <div class="dash-card-copy">Program, owner, phase, health, progress, next milestone, and current delivery note.</div>
             """
         )
