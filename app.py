@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 import re
 from textwrap import dedent
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import altair as alt
 import pandas as pd
@@ -28,6 +29,7 @@ COLORS = {
 }
 
 PORTFOLIO_NAME = "FY25 Strategic Transformation Portfolio"
+APP_TIMEZONE = ZoneInfo("America/New_York")
 PAGES = [
     "Impower Portfolio",
     "Program One-Pager",
@@ -2765,7 +2767,7 @@ with st.sidebar:
     selected_program = st.session_state["selected_program"]
     portfolio = PROGRAM_TO_PORTFOLIO[selected_program]
     reporting_date = st.date_input("Reporting Date", date.today())
-    refreshed_at = datetime.now()
+    refreshed_at = datetime.now(APP_TIMEZONE)
     portfolio_df = ensure_state(portfolio)
     page = render_app_navigation(st.session_state["current_page"])
     st.markdown("### Context")
