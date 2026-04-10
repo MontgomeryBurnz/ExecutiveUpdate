@@ -1304,9 +1304,40 @@ def clear_milestone_editor_state(portfolio: str, program: str) -> None:
             del st.session_state[key]
 
 
+def apply_pending_editor_removal(prefix: str, fields: list[str]) -> None:
+    pending_key = f"{prefix}_pending_remove"
+    count_key = f"{prefix}_count"
+    if pending_key not in st.session_state or count_key not in st.session_state:
+        return
+
+    remove_idx = st.session_state.pop(pending_key)
+    current_count = int(st.session_state.get(count_key, 0))
+    if remove_idx is None or remove_idx < 0 or remove_idx >= current_count:
+        return
+
+    rows: list[dict[str, object]] = []
+    for idx in range(current_count):
+        if idx == remove_idx:
+            continue
+        row_data = {}
+        for field in fields:
+            row_data[field] = st.session_state.get(f"{prefix}_{field}_{idx}")
+        rows.append(row_data)
+
+    for key in list(st.session_state.keys()):
+        if key.startswith(f"{prefix}_") and key != count_key:
+            del st.session_state[key]
+
+    st.session_state[count_key] = len(rows)
+    for idx, row_data in enumerate(rows):
+        for field in fields:
+            st.session_state[f"{prefix}_{field}_{idx}"] = row_data[field]
+
+
 def render_milestone_editor(portfolio: str, program: str, milestones: pd.DataFrame) -> pd.DataFrame:
     prefix = f"milestone_{portfolio}_{program}"
     count_key = f"{prefix}_count"
+    fields = ["name", "planned", "forecast", "status", "comment"]
     if count_key not in st.session_state:
         seed = milestones.reset_index(drop=True)
         st.session_state[count_key] = len(seed)
@@ -1316,6 +1347,8 @@ def render_milestone_editor(portfolio: str, program: str, milestones: pd.DataFra
             st.session_state[f"{prefix}_forecast_{idx}"] = pd.to_datetime(row["Forecast Date"]).date()
             st.session_state[f"{prefix}_status_{idx}"] = row["Status"]
             st.session_state[f"{prefix}_comment_{idx}"] = row["Comment"]
+
+    apply_pending_editor_removal(prefix, fields)
 
     add_col, _ = st.columns([0.3, 1.7])
     if add_col.button("Add Milestone", key=f"{prefix}_add", use_container_width=True):
@@ -1345,12 +1378,7 @@ def render_milestone_editor(portfolio: str, program: str, milestones: pd.DataFra
         comment = cols[4].text_input("Comment", key=f"{prefix}_comment_{idx}", label_visibility="collapsed")
         remove = cols[5].button("X", key=f"{prefix}_remove_{idx}", use_container_width=True)
         if remove:
-            for move_idx in range(idx, current_count - 1):
-                for field in ["name", "planned", "forecast", "status", "comment"]:
-                    st.session_state[f"{prefix}_{field}_{move_idx}"] = st.session_state.get(f"{prefix}_{field}_{move_idx + 1}")
-            for field in ["name", "planned", "forecast", "status", "comment"]:
-                st.session_state.pop(f"{prefix}_{field}_{current_count - 1}", None)
-            st.session_state[count_key] = current_count - 1
+            st.session_state[f"{prefix}_pending_remove"] = idx
             st.rerun()
         if str(name).strip():
             rows.append(
@@ -1369,6 +1397,7 @@ def render_milestone_editor(portfolio: str, program: str, milestones: pd.DataFra
 def render_risk_editor(portfolio: str, program: str, risks: pd.DataFrame) -> pd.DataFrame:
     prefix = f"risk_{portfolio}_{program}"
     count_key = f"{prefix}_count"
+    fields = ["severity", "title", "owner", "target", "description", "mitigation"]
     if count_key not in st.session_state:
         seed = risks.reset_index(drop=True)
         st.session_state[count_key] = len(seed)
@@ -1379,6 +1408,8 @@ def render_risk_editor(portfolio: str, program: str, risks: pd.DataFrame) -> pd.
             st.session_state[f"{prefix}_target_{idx}"] = pd.to_datetime(row["Target Date"]).date()
             st.session_state[f"{prefix}_description_{idx}"] = row["Description"]
             st.session_state[f"{prefix}_mitigation_{idx}"] = row["Mitigation Plan"]
+
+    apply_pending_editor_removal(prefix, fields)
 
     add_col, _ = st.columns([0.24, 1.76])
     if add_col.button("Add Risk", key=f"{prefix}_add", use_container_width=True):
@@ -1410,12 +1441,7 @@ def render_risk_editor(portfolio: str, program: str, risks: pd.DataFrame) -> pd.
         mitigation = cols[5].text_input("Mitigation", key=f"{prefix}_mitigation_{idx}", label_visibility="collapsed")
         remove = cols[6].button("X", key=f"{prefix}_remove_{idx}", use_container_width=True)
         if remove:
-            for move_idx in range(idx, current_count - 1):
-                for field in ["severity", "title", "owner", "target", "description", "mitigation"]:
-                    st.session_state[f"{prefix}_{field}_{move_idx}"] = st.session_state.get(f"{prefix}_{field}_{move_idx + 1}")
-            for field in ["severity", "title", "owner", "target", "description", "mitigation"]:
-                st.session_state.pop(f"{prefix}_{field}_{current_count - 1}", None)
-            st.session_state[count_key] = current_count - 1
+            st.session_state[f"{prefix}_pending_remove"] = idx
             st.rerun()
         if str(title).strip():
             rows.append(
@@ -1435,6 +1461,7 @@ def render_risk_editor(portfolio: str, program: str, risks: pd.DataFrame) -> pd.
 def render_decision_editor(portfolio: str, program: str, decisions: pd.DataFrame) -> pd.DataFrame:
     prefix = f"decision_{portfolio}_{program}"
     count_key = f"{prefix}_count"
+    fields = ["topic", "required", "impact", "recommendation"]
     if count_key not in st.session_state:
         seed = decisions.reset_index(drop=True)
         st.session_state[count_key] = len(seed)
@@ -1443,6 +1470,8 @@ def render_decision_editor(portfolio: str, program: str, decisions: pd.DataFrame
             st.session_state[f"{prefix}_required_{idx}"] = pd.to_datetime(row["Required By"]).date()
             st.session_state[f"{prefix}_impact_{idx}"] = row["Impact if Unresolved"]
             st.session_state[f"{prefix}_recommendation_{idx}"] = row["Recommendation"]
+
+    apply_pending_editor_removal(prefix, fields)
 
     add_col, _ = st.columns([0.28, 1.72])
     if add_col.button("Add Request", key=f"{prefix}_add", use_container_width=True):
@@ -1469,12 +1498,7 @@ def render_decision_editor(portfolio: str, program: str, decisions: pd.DataFrame
         recommendation = cols[3].text_input("Recommendation", key=f"{prefix}_recommendation_{idx}", label_visibility="collapsed")
         remove = cols[4].button("X", key=f"{prefix}_remove_{idx}", use_container_width=True)
         if remove:
-            for move_idx in range(idx, current_count - 1):
-                for field in ["topic", "required", "impact", "recommendation"]:
-                    st.session_state[f"{prefix}_{field}_{move_idx}"] = st.session_state.get(f"{prefix}_{field}_{move_idx + 1}")
-            for field in ["topic", "required", "impact", "recommendation"]:
-                st.session_state.pop(f"{prefix}_{field}_{current_count - 1}", None)
-            st.session_state[count_key] = current_count - 1
+            st.session_state[f"{prefix}_pending_remove"] = idx
             st.rerun()
         if str(topic).strip():
             rows.append(
