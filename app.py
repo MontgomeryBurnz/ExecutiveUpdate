@@ -33,7 +33,7 @@ APP_TIMEZONE = ZoneInfo("America/New_York")
 PAGES = [
     "Impower Portfolio",
     "Program One-Pager",
-    "Impower Lead Login",
+    "Impower Login",
     "Settings",
     "Help & Support",
 ]
@@ -1543,7 +1543,7 @@ def render_header(page: str, portfolio: str, reporting_date: date) -> None:
     badge_map = {
         "Impower Portfolio": "Impower Portfolio",
         "Program One-Pager": "Program One-Pager",
-        "Impower Lead Login": "Impower Lead Login",
+        "Impower Login": "Impower Login",
         "Settings": "Settings",
         "Help & Support": "Help & Support",
     }
@@ -1604,7 +1604,7 @@ def render_app_navigation(current_page: str) -> str:
     nav_items = [
         "Impower Portfolio",
         "Program One-Pager",
-        "Impower Lead Login",
+        "Impower Login",
         "Settings",
         "Help & Support",
     ]
@@ -1668,25 +1668,25 @@ def render_weekly_updates_lock() -> None:
         """
         <div class="panel-header">
             <div class="eyebrow">Restricted Access</div>
-            <div class="heading">Impower Lead Login</div>
+            <div class="heading">Impower Login</div>
             <div class="copy">This page is limited to program leads and authorized update owners.</div>
         </div>
         """
     )
     with st.container(border=True):
         if not password:
-            st.error("Impower Lead Login is locked, but no password has been configured yet in Streamlit secrets.")
+            st.error("Impower Login is locked, but no password has been configured yet in Streamlit secrets.")
             st.info("Add `weekly_updates_password` in your Streamlit app secrets to enable access.")
             return
 
         st.markdown("#### Enter Password")
         with st.form("weekly_updates_password_form", clear_on_submit=False):
             entered = st.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter password")
-            submitted = st.form_submit_button("Unlock Impower Lead Login", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Unlock Impower Login", type="primary", use_container_width=True)
         if submitted:
             if entered == password:
                 st.session_state["weekly_updates_unlocked"] = True
-                st.success("Impower Lead Login unlocked.")
+                st.success("Impower Login unlocked.")
                 st.rerun()
             else:
                 st.session_state["weekly_updates_unlocked"] = False
@@ -2254,7 +2254,7 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
         render_html(
             """
             <div class="dash-card-title">Portfolio Program Grid</div>
-            <div class="dash-card-heading">Impower Lead Login</div>
+            <div class="dash-card-heading">Impower Login</div>
             <div class="dash-card-copy">Program, owner, phase, health, progress, next milestone, and current delivery note.</div>
             """
         )
@@ -2520,7 +2520,7 @@ def render_help_support() -> None:
         <div class="card">
             <div class="eyebrow">Getting Started</div>
             <ul class="mini-list">
-                <li>Use <strong>Impower Lead Login</strong> to enter the current week’s program status, milestones, risks, and decision requests.</li>
+                <li>Use <strong>Impower Login</strong> to enter the current week’s program status, milestones, risks, and decision requests.</li>
                 <li>Use <strong>Program One-Pager</strong> to review how a single program is presented for leadership consumption.</li>
                 <li>Use <strong>Impower Portfolio</strong> for portfolio-wide oversight of milestones, risks, and action items.</li>
             </ul>
@@ -3055,7 +3055,7 @@ if page == "Impower Portfolio":
     render_dashboard(portfolio, portfolio_df, reporting_date, refreshed_at)
 elif page == "Program One-Pager":
     render_program_one_pager(portfolio, selected_program, portfolio_df, reporting_date)
-elif page == "Impower Lead Login":
+elif page == "Impower Login":
     if weekly_updates_unlocked():
         render_program_update(portfolio, selected_program, portfolio_df, reporting_date)
     else:
