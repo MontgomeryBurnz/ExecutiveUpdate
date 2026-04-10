@@ -1730,7 +1730,6 @@ def render_program_one_pager(portfolio: str, program: str, df: pd.DataFrame, rep
     milestones = one_pager_milestones(row)
     confidence = "Medium" if row["Status"] != "On Track" else "High"
     confidence_delta = "was High" if confidence == "Medium" else "steady"
-
     risk_rows = []
     for item in risks:
         sev_class = {
@@ -1740,60 +1739,62 @@ def render_program_one_pager(portfolio: str, program: str, df: pd.DataFrame, rep
             "DEP": "sev-dep",
         }.get(item["severity"], "sev-med")
         risk_rows.append(
-            f"""
-            <tr>
-                <td><span class="sev {sev_class}">{esc(item["severity"])}</span></td>
-                <td>{esc(item["description"])}</td>
-                <td>{esc(item["owner"])}</td>
-                <td>{esc(item["mitigation"])}</td>
-                <td>{esc(item["target"])}</td>
-            </tr>
-            """
+            f'<tr><td><span class="sev {sev_class}">{esc(item["severity"])}</span></td><td>{esc(item["description"])}</td><td>{esc(item["owner"])}</td><td>{esc(item["mitigation"])}</td><td>{esc(item["target"])}</td></tr>'
         )
 
     decision_cards = []
+    decision_colors = ["decision-red", "decision-amber", "decision-blue"]
     for idx, item in enumerate(decisions, start=1):
         decision_cards.append(
-            f"""
-            <div class="op-decision">
-                <div class="op-decision-num">{idx}</div>
-                <div>
-                    <div class="op-decision-title">{esc(item["title"])}</div>
-                    <div class="op-decision-meta">{esc(item["meta"])}</div>
-                </div>
-            </div>
-            """
+            f'<div class="decision-card"><div class="decision-num {decision_colors[(idx - 1) % len(decision_colors)]}">{idx}</div><div><div class="decision-title">{esc(item["title"])}</div><div class="decision-meta">{esc(item["meta"])}</div></div></div>'
         )
+
+    status_color = {"GREEN": "#22c55e", "AMBER": "#f59e0b", "RED": "#ef4444"}.get(status_label, "#22c55e")
+    phase_label = str(row["Stage"])
+
+    timeline_items = []
+    current_index = min(2, len(milestones) - 1)
+    for idx, item in enumerate(milestones):
+        if idx < current_index:
+            node_class = "done"
+            icon = "✓"
+        elif idx == current_index:
+            node_class = "current"
+            icon = "✦"
+        else:
+            node_class = "future"
+            icon = "⚑"
+        note = esc(item["note"])
+        note_class = "note-red" if "risk" in note.lower() or "slip" in note.lower() else ("note-green" if "time" in note.lower() or "early" in note.lower() or "checkpoint" in note.lower() else "note-muted")
+        timeline_items.append(
+            f'<div class="timeline-step {node_class}"><div class="timeline-node">{icon}</div><div class="timeline-name">{esc(item["name"])}</div><div class="timeline-date">{item["date"]:%d %b %Y}</div><div class="timeline-note {note_class}">{note}</div></div>'
+        )
+
+    accomplishment_items = "".join(f"<li>{esc(item)}</li>" for item in accomplishments)
+    upcoming_items = "".join(f"<li>{esc(item)}</li>" for item in upcoming_work)
 
     workstream_cards = []
     for item in workstreams:
         pct = int(item["pct"])
+        tone = "ws-green" if pct >= 75 else ("ws-amber" if pct >= 45 else "ws-red")
         workstream_cards.append(
-            f"""
-            <div class="op-workstream">
-                <div class="op-work-top">
-                    <div class="op-work-name">{esc(item["name"])}</div>
-                    <div class="op-work-pct">{pct}%</div>
-                </div>
-                <div class="op-progress-bar"><span style="width:{pct}%"></span></div>
-                <div class="op-work-note">{esc(item["note"])}</div>
-                <div class="op-work-owner">Owner: {esc(item["owner"])}</div>
-            </div>
-            """
+            f'<div class="ws-card"><div class="ws-head"><div class="ws-name">{esc(item["name"])}</div><div class="ws-dot {tone}"></div></div><div class="ws-bar"><span class="{tone}" style="width:{pct}%"></span></div><div class="ws-pct">{pct}%</div><div class="ws-note">{esc(item["note"])}</div><div class="ws-owner">Owner: {esc(item["owner"])}</div></div>'
         )
 
-    timeline_nodes = []
-    for item in milestones:
-        note_cls = "on-track" if item["note"] in {"On time", "On track", "Current checkpoint"} else "at-risk"
-        timeline_nodes.append(
-            f"""
-            <div class="op-timeline-item">
-                <div class="op-timeline-title">{esc(item["name"])}</div>
-                <div class="op-timeline-date">{item["date"]:%d %b %Y}</div>
-                <div class="op-timeline-note {note_cls}">{esc(item["note"])}</div>
-            </div>
-            """
-        )
+    summary_text = (
+        f"{esc(row['Summary'])} The most significant item for leadership attention is {esc(row['Risk Detail']).lower()}, "
+        f"which is being managed through {esc(row['Mitigation']).lower()}."
+    )
+
+    hero_bullets = [
+        ("neutral", esc(highlights[0])),
+        ("green", esc(highlights[1])),
+        ("red", esc(highlights[2])),
+    ]
+    hero_bullet_html = "".join(
+        f'<div class="hero-bullet {tone}"><span class="hero-dot"></span><span>{text}</span></div>'
+        for tone, text in hero_bullets
+    )
 
     html = f"""
     <html>
@@ -1804,327 +1805,222 @@ def render_program_one_pager(portfolio: str, program: str, df: pd.DataFrame, rep
         * {{ box-sizing: border-box; }}
         body {{
             margin: 0;
-            background: linear-gradient(180deg, #f6f9fd 0%, #eef3f9 100%);
+            background: linear-gradient(180deg, #f4f7fb 0%, #eef3f9 100%);
             font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            color: #4f6278;
+            color: #49576a;
         }}
-        .page {{ width: 100%; max-width: 1520px; margin: 0 auto; padding: 18px 18px 28px; }}
-        .layout {{ display: block; }}
-        .rail {{
-            display: none;
+        .page {{ width: 100%; max-width: 1560px; margin: 0 auto; padding: 10px 8px 28px; }}
+        .hero {{
+            background: #0f1837;
+            color: white;
+            border-radius: 22px;
+            padding: 20px 24px 18px;
+            box-shadow: 0 18px 42px rgba(8,16,40,0.18);
         }}
-        .rail-item {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 11px 12px;
-            border-radius: 14px;
-            color: #94a3b8;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }}
-        .rail-item.active {{ background: linear-gradient(180deg, #376fe7 0%, #255ed4 100%); color: white; }}
-        .rail-divider {{ height: 1px; background: #dee7f2; margin: 10px 0; }}
-        .content {{ display: grid; gap: 16px; min-width: 0; }}
-        .topbar {{
+        .hero-top {{
             display: grid;
-            grid-template-columns: minmax(280px, 0.95fr) minmax(360px, 1.35fr) auto auto;
-            gap: 16px;
-            align-items: center;
+            grid-template-columns: minmax(0, 1.5fr) minmax(420px, 0.9fr);
+            gap: 24px;
+            align-items: start;
         }}
-        .brand-title {{ font-size: 32px; font-weight: 800; color: #304a68; line-height: 1.05; letter-spacing: -0.03em; }}
-        .brand-sub {{ font-size: 13px; color: #8b9db2; margin-top: 6px; }}
-        .search {{
-            background: rgba(255,255,255,0.92);
-            border: 1px solid #d9e3f0;
-            border-radius: 12px;
-            padding: 14px 18px;
-            color: #9aaabc;
+        .hero-title {{ font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: #ffffff; }}
+        .hero-sub {{ margin-top: 10px; font-size: 16px; color: #9bb2e8; }}
+        .hero-owners {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            margin-top: 22px;
+            color: #a8b6d7;
             font-size: 14px;
-            min-width: 0;
         }}
-        .icon-row {{ display: flex; gap: 8px; }}
-        .icon {{
-            width: 34px; height: 34px; border: 1px solid #d9e3f0; border-radius: 10px; background: rgba(255,255,255,0.92);
-            display: flex; align-items: center; justify-content: center; color: #91a2b7; font-size: 13px; font-weight: 700;
+        .hero-owners strong {{ color: white; margin-left: 6px; }}
+        .hero-metrics {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
         }}
-        .profile {{ display: flex; align-items: center; gap: 10px; justify-content: flex-end; }}
-        .profile-copy {{ text-align: right; }}
-        .profile-name {{ font-size: 13px; font-weight: 800; color: #304a68; }}
-        .profile-role {{ font-size: 11px; color: #8b9db2; }}
-        .avatar {{
-            width: 36px; height: 36px; border-radius: 999px; background: linear-gradient(180deg, #376fe7, #255ed4);
-            color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+        .hero-metric-label {{ font-size: 12px; text-transform: uppercase; color: #9aa9cc; font-weight: 700; }}
+        .hero-metric-value {{ margin-top: 8px; font-size: 18px; font-weight: 800; color: white; display:flex; align-items:center; gap:10px; }}
+        .hero-status-dot {{ width: 18px; height: 18px; border-radius: 999px; background: {status_color}; display:inline-block; }}
+        .hero-delta {{ font-size: 16px; color: #41d77a; font-weight: 800; }}
+        .hero-divider {{ height: 1px; background: rgba(255,255,255,0.16); margin: 18px 0 14px; }}
+        .hero-bottom {{ display: flex; flex-wrap: wrap; gap: 28px; }}
+        .hero-bullet {{ display: flex; align-items: center; gap: 10px; font-size: 14px; }}
+        .hero-dot {{ width: 10px; height: 10px; border-radius: 999px; background: #9ca3af; display:inline-block; }}
+        .hero-bullet.green .hero-dot {{ background: #3ddb79; }}
+        .hero-bullet.red .hero-dot {{ background: #ff6b6b; }}
+        .hero-bullet span:last-child {{ color: #d9e2f8; }}
+        .panel {{
+            margin-top: 16px;
+            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+            border: 1px solid #d8e1ed;
+            border-radius: 22px;
+            padding: 18px 22px;
+            box-shadow: 0 12px 28px rgba(20,42,71,0.04);
         }}
-        .context-bar {{
-            display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-            border: 1px solid #d9e3f0; border-radius: 18px; padding: 14px 18px;
+        .section-title {{ display:flex; align-items:center; gap:10px; font-size: 16px; font-weight: 800; color: #1a2741; margin-bottom: 16px; }}
+        .section-icon {{ color: #2f5bd2; font-size: 15px; }}
+        .summary-copy {{ font-size: 15px; line-height: 1.45; color: #49576a; }}
+        .timeline-wrap {{ position: relative; padding: 20px 6px 2px; }}
+        .timeline-line {{
+            position: absolute; left: 5%; right: 5%; top: 38px; height: 8px; border-radius: 999px;
+            background: linear-gradient(90deg, #2f55c7 0%, #2f55c7 48%, #dfe4eb 48%, #dfe4eb 100%);
         }}
-        .context-left {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; color: #7f91a6; font-size: 13px; font-weight: 700; }}
-        .context-pill {{ padding: 6px 10px; border-radius: 999px; background: #edf4ff; color: #376fe7; }}
-        .context-actions {{ display: flex; gap: 10px; flex-wrap: wrap; }}
-        .ghost-btn, .primary-btn {{
-            border-radius: 12px; padding: 12px 16px; font-size: 14px; font-weight: 700; white-space: nowrap;
+        .timeline-grid {{
+            position: relative;
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 10px;
         }}
-        .ghost-btn {{ background: rgba(255,255,255,0.92); border: 1px solid #d9e3f0; color: #52667b; }}
-        .primary-btn {{ background: linear-gradient(180deg, #376fe7 0%, #255ed4 100%); color: white; }}
-        .program-hero {{
-            display: flex; justify-content: space-between; gap: 18px; align-items: flex-start;
-            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-            border: 1px solid #d9e3f0; border-radius: 22px; padding: 22px;
+        .timeline-step {{ text-align: center; }}
+        .timeline-node {{
+            width: 40px; height: 40px; border-radius: 999px; margin: 0 auto 10px;
+            display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px;
+            border: 3px solid #d8dce4; background: #eceff4; color: #8c93a1; position: relative; z-index: 2;
         }}
-        .program-title {{ font-size: clamp(30px, 3vw, 40px); font-weight: 800; color: #304a68; letter-spacing: -0.03em; }}
-        .program-sub {{ margin-top: 8px; font-size: 16px; color: #6f8298; }}
-        .owner-grid {{
-            display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 12px; margin-top: 16px;
+        .timeline-step.done .timeline-node {{ background: #2f55c7; border-color: #89a4ee; color: white; }}
+        .timeline-step.current .timeline-node {{ background: #f6a609; border-color: #ffd58a; color: white; }}
+        .timeline-name {{ font-size: 13px; font-weight: 800; color: #2a4cb8; line-height: 1.25; min-height: 34px; }}
+        .timeline-step.future .timeline-name {{ color: #737b87; }}
+        .timeline-step.current .timeline-name {{ color: #f29900; }}
+        .timeline-date {{ margin-top: 6px; font-size: 12px; color: #7d8796; }}
+        .timeline-note {{ margin-top: 6px; font-size: 12px; font-weight: 700; }}
+        .note-green {{ color: #18a34a; }}
+        .note-red {{ color: #ef4444; }}
+        .note-muted {{ color: #97a0ad; }}
+        .two-col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }}
+        .list {{ margin: 0; padding-left: 1.2rem; color: #49576a; }}
+        .list li {{ margin-bottom: 10px; line-height: 1.42; }}
+        .risk-decision {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }}
+        .risk-table {{ width: 100%; border-collapse: collapse; }}
+        .risk-table th {{ text-align: left; font-size: 11px; text-transform: uppercase; color: #9ba3af; padding: 10px 8px; border-bottom: 1px solid #e5e9f0; }}
+        .risk-table td {{ padding: 10px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top; font-size: 13px; color: #4f5d6f; }}
+        .risk-table tr:last-child td {{ border-bottom: none; }}
+        .sev {{ font-size: 12px; font-weight: 800; }}
+        .sev-high {{ color: #dc2626; }}
+        .sev-med {{ color: #b45309; }}
+        .sev-low {{ color: #16a34a; }}
+        .sev-dep {{ color: #2563eb; }}
+        .decision-shell {{ background: #eef3ff; border: 1px solid #b8cbff; border-radius: 18px; padding: 16px; }}
+        .decision-card {{
+            display: grid; grid-template-columns: 34px 1fr; gap: 14px; align-items: start;
+            background: white; border: 1px solid #d8e1f0; border-radius: 14px; padding: 14px 16px; margin-bottom: 14px;
         }}
-        .owner-card {{
-            background: #f7fbff; border: 1px solid #e2eaf5; border-radius: 16px; padding: 12px 14px;
+        .decision-card:last-child {{ margin-bottom: 0; }}
+        .decision-num {{
+            width: 30px; height: 30px; border-radius: 999px; color: white; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 13px;
         }}
-        .owner-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #8ea0b5; font-weight: 800; }}
-        .owner-value {{ margin-top: 6px; font-size: 15px; font-weight: 700; color: #304a68; }}
-        .status-stack {{
-            min-width: 320px; display: grid; gap: 12px;
+        .decision-red {{ background: #ef4444; }}
+        .decision-amber {{ background: #f59e0b; }}
+        .decision-blue {{ background: #2f55c7; }}
+        .decision-title {{ font-size: 14px; font-weight: 800; color: #1d2942; line-height: 1.35; }}
+        .decision-meta {{ margin-top: 5px; font-size: 12px; color: #7f8997; }}
+        .workstream-panel {{ margin-top: 16px; }}
+        .workstream-grid {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-top: 14px; }}
+        .ws-card {{ border: 1px solid #dde5ef; border-radius: 16px; padding: 16px; background: white; }}
+        .ws-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
+        .ws-name {{ font-size: 14px; font-weight: 800; color: #1d2942; }}
+        .ws-dot {{ width: 14px; height: 14px; border-radius: 999px; }}
+        .ws-green {{ background: #22c55e; }}
+        .ws-amber {{ background: #f59e0b; }}
+        .ws-red {{ background: #ef4444; }}
+        .ws-bar {{ margin-top: 14px; height: 10px; border-radius: 999px; background: #e7ebf0; overflow: hidden; }}
+        .ws-bar span {{ display:block; height:100%; border-radius:999px; }}
+        .ws-pct {{ margin-top: 8px; font-size: 13px; font-weight: 700; color: #7a8596; text-align: right; }}
+        .ws-note {{ margin-top: 12px; font-size: 13px; line-height: 1.38; color: #5c6776; }}
+        .ws-owner {{ margin-top: 12px; font-size: 12px; color: #98a1ae; }}
+        @media (max-width: 1220px) {{
+            .hero-top, .two-col, .risk-decision {{ grid-template-columns: 1fr; }}
+            .hero-metrics {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+            .workstream-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
         }}
-        .status-grid {{ display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 12px; }}
-        .status-card {{
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-            border: 1px solid #d9e3f0; border-radius: 18px; padding: 16px;
-        }}
-        .status-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #93a3b6; font-weight: 800; }}
-        .status-value {{ margin-top: 8px; font-size: 28px; font-weight: 800; color: #304a68; }}
-        .op-green .status-value {{ color: #2e8b6f; }}
-        .op-amber .status-value {{ color: #d3962f; }}
-        .op-red .status-value {{ color: #cf5c5c; }}
-        .status-sub {{ margin-top: 6px; font-size: 12px; color: #8093a9; }}
-        .highlights {{
-            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
-        }}
-        .highlight {{
-            background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%); border: 1px solid #d9e3f0; border-radius: 16px; padding: 12px 14px;
-            font-size: 14px; color: #5f7288;
-        }}
-        .main-grid {{ display: grid; grid-template-columns: minmax(0, 1.52fr) minmax(360px, 0.96fr); gap: 16px; }}
-        .stack {{ display: grid; gap: 16px; min-width: 0; }}
-        .card {{
-            background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%); border: 1px solid #d9e3f0; border-radius: 22px; padding: 18px;
-            box-shadow: 0 12px 32px rgba(22,50,79,0.04);
-        }}
-        .card-eyebrow {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #376fe7; font-weight: 800; margin-bottom: 8px; }}
-        .card-title {{ font-size: 18px; font-weight: 800; color: #304a68; }}
-        .card-copy {{ margin-top: 8px; color: #6f8298; font-size: 15px; line-height: 1.6; }}
-        .bullet-list {{ margin: 14px 0 0; padding-left: 20px; color: #5f7288; }}
-        .bullet-list li {{ margin-bottom: 10px; line-height: 1.5; }}
-        .timeline-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }}
-        .op-timeline-item {{ border: 1px solid #e3eaf4; border-radius: 16px; padding: 14px; background: #fcfdff; }}
-        .op-timeline-title {{ font-size: 15px; font-weight: 700; color: #304a68; }}
-        .op-timeline-date {{ margin-top: 6px; font-size: 13px; color: #8193a9; }}
-        .op-timeline-note {{ margin-top: 8px; font-size: 12px; font-weight: 800; }}
-        .on-track {{ color: #2e8b6f; }}
-        .at-risk {{ color: #cf5c5c; }}
-        .table-scroll {{ width: 100%; overflow-x: auto; overflow-y: hidden; }}
-        table {{ width: 100%; border-collapse: collapse; margin-top: 14px; table-layout: fixed; }}
-        th {{
-            text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8;
-            padding: 12px 10px; border-bottom: 1px solid #e6edf5;
-        }}
-        td {{ padding: 14px 10px; border-bottom: 1px solid #edf2f8; font-size: 14px; color: #516478; vertical-align: top; }}
-        tr:last-child td {{ border-bottom: none; }}
-        .sev {{ display: inline-block; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 800; }}
-        .sev-high {{ background: rgba(207,92,92,0.13); color: #cf5c5c; }}
-        .sev-med {{ background: rgba(211,162,60,0.14); color: #d3a23c; }}
-        .sev-low {{ background: rgba(46,139,111,0.12); color: #2e8b6f; }}
-        .sev-dep {{ background: rgba(55,111,231,0.12); color: #376fe7; }}
-        .op-decision {{
-            display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start;
-            padding: 14px 0; border-bottom: 1px solid #edf2f8;
-        }}
-        .op-decision:last-child {{ border-bottom: none; padding-bottom: 0; }}
-        .op-decision-num {{
-            width: 34px; height: 34px; border-radius: 999px; background: linear-gradient(180deg, #376fe7 0%, #255ed4 100%);
-            color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px;
-        }}
-        .op-decision-title {{ font-size: 15px; font-weight: 700; color: #304a68; line-height: 1.45; }}
-        .op-decision-meta {{ margin-top: 5px; font-size: 12px; color: #8497ae; }}
-        .workstream-grid {{ display: grid; gap: 12px; margin-top: 14px; }}
-        .op-workstream {{ border: 1px solid #e1e9f3; border-radius: 16px; padding: 14px; background: #fcfdff; }}
-        .op-work-top {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
-        .op-work-name {{ font-size: 15px; font-weight: 700; color: #304a68; }}
-        .op-work-pct {{ font-size: 15px; font-weight: 800; color: #376fe7; }}
-        .op-progress-bar {{ height: 10px; border-radius: 999px; background: #edf2f7; margin-top: 10px; overflow: hidden; }}
-        .op-progress-bar span {{ display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #5c8ef0 0%, #376fe7 100%); }}
-        .op-work-note {{ margin-top: 10px; font-size: 13px; color: #6f8298; line-height: 1.45; }}
-        .op-work-owner {{ margin-top: 8px; font-size: 12px; color: #8ea0b5; font-weight: 700; }}
-        .change-grid {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }}
-        .change-card {{ border: 1px solid #e1e9f3; border-radius: 16px; padding: 14px; background: #fcfdff; }}
-        .change-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #8ea0b5; font-weight: 800; }}
-        .change-value {{ margin-top: 8px; font-size: 16px; font-weight: 800; color: #304a68; }}
-        .change-note {{ margin-top: 8px; font-size: 13px; color: #6f8298; line-height: 1.45; }}
-        @media (max-width: 1320px) {{
-            .topbar {{ grid-template-columns: minmax(240px, 0.95fr) minmax(260px, 1fr) auto; }}
-            .profile {{ grid-column: 1 / -1; justify-content: flex-start; }}
-            .main-grid {{ grid-template-columns: 1fr; }}
-            .change-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
-        }}
-        @media (max-width: 1080px) {{
-            .topbar, .program-hero {{ grid-template-columns: 1fr; display: grid; }}
-            .owner-grid, .status-grid, .highlights, .timeline-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-            .context-bar {{ align-items: flex-start; }}
-        }}
-        @media (max-width: 760px) {{
-            .page {{ padding: 12px 10px 20px; }}
-            .owner-grid, .status-grid, .highlights, .timeline-grid, .change-grid {{ grid-template-columns: 1fr; }}
-            table, thead, tbody, th, td, tr {{ display: block; }}
-            thead {{ display: none; }}
-            tbody tr {{ padding: 10px 0; border-bottom: 1px solid #edf2f8; }}
-            td {{ border-bottom: none; padding: 6px 0; }}
+        @media (max-width: 820px) {{
+            .page {{ padding: 8px 4px 24px; }}
+            .hero-metrics, .timeline-grid, .workstream-grid {{ grid-template-columns: 1fr; }}
+            .timeline-line {{ display:none; }}
         }}
     </style>
     </head>
     <body>
         <div class="page">
-            <div class="layout">
-                <div class="rail">
-                    <div class="rail-item">Impower Portfolio</div>
-                    <div class="rail-item active">Program One-Pager</div>
-                    <div class="rail-item">Weekly Update Entry</div>
-                    <div class="rail-divider"></div>
-                    <div class="rail-item">All Programs</div>
-                    <div class="rail-item">Roadmap &amp; Milestones</div>
-                    <div class="rail-item">Risks &amp; Issues</div>
-                    <div class="rail-item">Action Items</div>
-                    <div class="rail-item">Trend Analytics</div>
-                    <div class="rail-item">Settings</div>
-                    <div class="rail-item">Help &amp; Support</div>
-                </div>
-                <div class="content">
-                    <div class="topbar">
+            <div class="hero">
+                <div class="hero-top">
+                    <div>
+                        <div class="hero-title">{esc(program)}</div>
+                        <div class="hero-sub">{esc(portfolio)} transformation program overview</div>
+                        <div class="hero-owners">
+                            <div>Executive Sponsor:<strong>{esc(sponsor)}</strong></div>
+                            <div>Program Lead:<strong>{esc(lead)}</strong></div>
+                            <div>PMO:<strong>{esc(pmo)}</strong></div>
+                        </div>
+                    </div>
+                    <div class="hero-metrics">
                         <div>
-                            <div class="brand-title">Portfolio Command Center</div>
-                            <div class="brand-sub">Strategic Program Intelligence</div>
+                            <div class="hero-metric-label">Overall Status</div>
+                            <div class="hero-metric-value"><span class="hero-status-dot"></span>{status_label}</div>
                         </div>
-                        <div class="search">Search programs, milestones, risks...</div>
-                        <div class="icon-row"><div class="icon">◐</div><div class="icon">◔</div><div class="icon">3</div><div class="icon">⚙</div></div>
-                        <div class="profile">
-                            <div class="profile-copy"><div class="profile-name">Marcus Ellison</div><div class="profile-role">VP, Transformation Office</div></div>
-                            <div class="avatar">ME</div>
-                        </div>
-                    </div>
-                    <div class="context-bar">
-                        <div class="context-left">
-                            <span class="context-pill">Reporting Period: {period}</span>
-                            <span>|</span>
-                            <span>Cycle {cycle_num} of {total_cycles}</span>
-                        </div>
-                        <div class="context-actions">
-                            <div class="ghost-btn">Back to Impower Portfolio</div>
-                            <div class="primary-btn">Edit Weekly Update</div>
-                        </div>
-                    </div>
-                    <div class="program-hero">
                         <div>
-                            <div class="program-title">{esc(program)}</div>
-                            <div class="program-sub">{esc(portfolio)} transformation program overview</div>
-                            <div class="owner-grid">
-                                <div class="owner-card"><div class="owner-label">Executive Sponsor</div><div class="owner-value">{esc(sponsor)}</div></div>
-                                <div class="owner-card"><div class="owner-label">Program Lead</div><div class="owner-value">{esc(lead)}</div></div>
-                                <div class="owner-card"><div class="owner-label">PMO</div><div class="owner-value">{esc(pmo)}</div></div>
-                            </div>
+                            <div class="hero-metric-label">% Complete</div>
+                            <div class="hero-metric-value">{progress}% <span class="hero-delta">{delta}</span></div>
                         </div>
-                        <div class="status-stack">
-                            <div class="status-grid">
-                                <div class="status-card {status_cls}"><div class="status-label">Overall Status</div><div class="status-value">{status_label}</div></div>
-                                <div class="status-card"><div class="status-label">% Complete</div><div class="status-value">{progress}%</div><div class="status-sub">{delta}</div></div>
-                                <div class="status-card"><div class="status-label">Current Phase</div><div class="status-value" style="font-size:22px;">{esc(row["Stage"])}</div></div>
-                            </div>
-                            <div class="highlights">
-                                <div class="highlight">{esc(highlights[0])}</div>
-                                <div class="highlight">{esc(highlights[1])}</div>
-                                <div class="highlight">{esc(highlights[2])}</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="main-grid">
-                        <div class="stack">
-                            <div class="card">
-                                <div class="card-eyebrow">Executive Summary</div>
-                                <div class="card-title">Program Narrative</div>
-                                <div class="card-copy">{esc(row["Summary"])}</div>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Recent Accomplishments</div>
-                                <div class="card-title">What Landed This Cycle</div>
-                                <ul class="bullet-list">
-                                    <li>{esc(accomplishments[0])}</li>
-                                    <li>{esc(accomplishments[1])}</li>
-                                    <li>{esc(accomplishments[2])}</li>
-                                    <li>{esc(accomplishments[3])}</li>
-                                </ul>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Upcoming Work (Next 2 Weeks)</div>
-                                <div class="card-title">Near-Term Delivery Focus</div>
-                                <ul class="bullet-list">
-                                    {''.join(f'<li>{esc(item)}</li>' for item in upcoming_work)}
-                                </ul>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Workstream Status</div>
-                                <div class="card-title">Execution by Workstream</div>
-                                <div class="workstream-grid">
-                                    {''.join(workstream_cards)}
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Change From Previous Reporting Cycle</div>
-                                <div class="card-title">Cycle-over-Cycle View</div>
-                                <div class="change-grid">
-                                    <div class="change-card"><div class="change-label">Status Movement</div><div class="change-value">{status_label} → {status_label}</div><div class="change-note">{"No change this cycle" if row["Status"] != "At Risk" else "Escalated pressure remains active"}</div></div>
-                                    <div class="change-card"><div class="change-label">Milestone Changes</div><div class="change-value">{esc(row["Milestone"])}</div><div class="change-note">{"Held on plan" if row["Status"] == "On Track" else "Monitoring schedule pressure"}</div></div>
-                                    <div class="change-card"><div class="change-label">New Risks Opened</div><div class="change-value">{min(2, int(row["Open Risks"]))} new</div><div class="change-note">Total open risks: {int(row["Open Risks"])}</div></div>
-                                    <div class="change-card"><div class="change-label">Closed Issues</div><div class="change-value">{max(1, 3 - int(row["Escalations"]))} closed</div><div class="change-note">Dependency follow-ups and execution blockers addressed.</div></div>
-                                    <div class="change-card"><div class="change-label">Confidence Level</div><div class="change-value">{confidence}</div><div class="change-note">{confidence_delta}</div></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="stack">
-                            <div class="card">
-                                <div class="card-eyebrow">Milestone Timeline</div>
-                                <div class="card-title">Key Delivery Checkpoints</div>
-                                <div class="timeline-grid">
-                                    {''.join(timeline_nodes)}
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Risks / Issues / Dependencies</div>
-                                <div class="card-title">Active Risk Register</div>
-                                <div class="table-scroll">
-                                    <table>
-                                        <thead>
-                                            <tr><th>Severity</th><th>Description</th><th>Owner</th><th>Mitigation</th><th>Target Date</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            {''.join(risk_rows)}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-eyebrow">Leadership Decisions Needed</div>
-                                <div class="card-title">Executive Requests</div>
-                                {''.join(decision_cards)}
-                            </div>
+                        <div>
+                            <div class="hero-metric-label">Current Phase</div>
+                            <div class="hero-metric-value">{esc(phase_label)}</div>
                         </div>
                     </div>
                 </div>
+                <div class="hero-divider"></div>
+                <div class="hero-bottom">{hero_bullet_html}</div>
+            </div>
+
+            <div class="panel">
+                <div class="section-title"><span class="section-icon">▣</span>Executive Summary</div>
+                <div class="summary-copy">{summary_text}</div>
+            </div>
+
+            <div class="panel">
+                <div class="section-title"><span class="section-icon">☰</span>Milestone Timeline</div>
+                <div class="timeline-wrap">
+                    <div class="timeline-line"></div>
+                    <div class="timeline-grid">{''.join(timeline_items)}</div>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="panel">
+                    <div class="section-title"><span class="section-icon">✳</span>Recent Accomplishments</div>
+                    <ul class="list">{accomplishment_items}</ul>
+                </div>
+                <div class="panel">
+                    <div class="section-title"><span class="section-icon">▸</span>Upcoming Work (Next 2 Weeks)</div>
+                    <ul class="list">{upcoming_items}</ul>
+                </div>
+            </div>
+
+            <div class="risk-decision">
+                <div class="panel">
+                    <div class="section-title"><span class="section-icon">⚠</span>Risks / Issues / Dependencies</div>
+                    <table class="risk-table">
+                        <thead><tr><th>Severity</th><th>Description</th><th>Owner</th><th>Mitigation</th><th>Target Date</th></tr></thead>
+                        <tbody>{''.join(risk_rows)}</tbody>
+                    </table>
+                </div>
+                <div class="panel decision-shell">
+                    <div class="section-title"><span class="section-icon">✎</span>Leadership Decisions Needed</div>
+                    {''.join(decision_cards)}
+                </div>
+            </div>
+
+            <div class="panel workstream-panel">
+                <div class="section-title"><span class="section-icon">▤</span>Workstream Status</div>
+                <div class="workstream-grid">{''.join(workstream_cards)}</div>
             </div>
         </div>
     </body>
     </html>
     """
-    components.html(html, height=2850, scrolling=True)
+    components.html(html, height=2450, scrolling=True)
 
 
 def render_html_table(df: pd.DataFrame, columns: list[str], rename_map: dict[str, str] | None = None) -> None:
