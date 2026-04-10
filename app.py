@@ -1364,6 +1364,12 @@ def sync_selected_program() -> None:
     st.session_state["selected_program"] = st.session_state["sidebar_selected_program"]
 
 
+def navigate_to_program(program: str) -> None:
+    st.session_state["pending_selected_program"] = program
+    st.session_state["current_page"] = "Program One-Pager"
+    st.rerun()
+
+
 def timeline_chart(df: pd.DataFrame) -> alt.Chart:
     timeline = df[["Program", "Stage", "Start", "End", "Milestone", "Milestone Date"]].copy()
     return (
@@ -2049,10 +2055,7 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
             milestone_date = pd.to_datetime(row["Milestone Date"]).strftime("%b %d, %Y")
             row_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
             if row_cols[0].button(str(row["Program"]), key=f"portfolio_program_{idx}", use_container_width=True):
-                st.session_state["selected_program"] = str(row["Program"])
-                st.session_state["sidebar_selected_program"] = str(row["Program"])
-                st.session_state["current_page"] = "Program One-Pager"
-                st.rerun()
+                navigate_to_program(str(row["Program"]))
             row_cols[1].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
             row_cols[2].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
             row_cols[3].markdown(f'<div style="margin-top:0.7rem;">{rag_html}</div>', unsafe_allow_html=True)
@@ -2629,6 +2632,10 @@ inject_styles()
 query_params = st.query_params
 requested_page = query_params.get("page")
 requested_program = query_params.get("program")
+pending_program = st.session_state.pop("pending_selected_program", None)
+if pending_program in ALL_PROGRAMS:
+    st.session_state["selected_program"] = pending_program
+    st.session_state["sidebar_selected_program"] = pending_program
 if requested_program in ALL_PROGRAMS:
     st.session_state["selected_program"] = requested_program
     st.session_state["sidebar_selected_program"] = requested_program
