@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import re
 from textwrap import dedent
 from urllib.parse import quote
 
@@ -693,6 +694,7 @@ def inject_styles() -> None:
             .roadmap-grid {{
                 display: grid;
                 gap: 1.5rem;
+                min-width: 0;
             }}
             .roadmap-quarter-row {{
                 display: flex;
@@ -718,6 +720,8 @@ def inject_styles() -> None:
             .road-band-wrap {{
                 position: relative;
                 padding-bottom: 2rem;
+                width: 100%;
+                min-width: 0;
             }}
             .road-band {{
                 display: flex;
@@ -727,6 +731,7 @@ def inject_styles() -> None:
                 border-radius: 999px;
                 background: #eff1f4;
                 overflow: hidden;
+                min-width: 0;
             }}
             .road-band-segment {{
                 display: flex;
@@ -1329,7 +1334,9 @@ def status_class(status: str) -> str:
 
 
 def render_html(html: str) -> None:
-    st.markdown(dedent(html).strip(), unsafe_allow_html=True)
+    normalized = dedent(html).strip()
+    normalized = re.sub(r"(?m)^[ \t]+(?=<)", "", normalized)
+    st.markdown(normalized, unsafe_allow_html=True)
 
 
 def metric_card(title: str, value: str | int, note: str) -> str:
@@ -2237,16 +2244,11 @@ def render_dashboard_roadmap(df: pd.DataFrame) -> None:
                 f'<div class="road-marker-label {label_class}" style="left:{marker_pos}%">{milestone_label}</div>'
             )
         roadmap_rows.append(
-            f"""
-            <div class="roadmap-journey">
-                <div class="roadmap-journey-name">{esc(row["Program"])}</div>
-                <div class="road-band-wrap">
-                    <div class="road-band">{segment_html}</div>
-                    {marker_html}
-                </div>
-                <div class="road-progress">{int(row["Progress"])}% complete</div>
-            </div>
-            """
+            f'<div class="roadmap-journey">'
+            f'<div class="roadmap-journey-name">{esc(row["Program"])}</div>'
+            f'<div class="road-band-wrap"><div class="road-band">{segment_html}</div>{marker_html}</div>'
+            f'<div class="road-progress">{int(row["Progress"])}% complete</div>'
+            f'</div>'
         )
 
     render_html(
