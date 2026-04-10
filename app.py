@@ -897,7 +897,8 @@ def inject_styles() -> None:
             }}
             .risk-item {{
                 display: grid;
-                gap: 0.45rem;
+                gap: 0.55rem;
+                padding: 1rem 1.1rem;
             }}
             .risk-head {{
                 display: flex;
@@ -906,21 +907,42 @@ def inject_styles() -> None:
                 gap: 0.75rem;
             }}
             .risk-title {{
-                font-size: 0.94rem;
-                font-weight: 700;
-                color: {COLORS["navy"]};
+                font-size: 1rem;
+                font-weight: 800;
+                color: #212833;
             }}
             .risk-meta {{
-                font-size: 0.8rem;
-                color: {COLORS["muted"]};
+                font-size: 0.84rem;
+                color: #7f8795;
             }}
             .risk-trend {{
-                font-size: 0.74rem;
+                font-size: 0.9rem;
                 font-weight: 800;
             }}
-            .trend-worse {{ color: {COLORS["red"]}; }}
-            .trend-stable {{ color: {COLORS["muted"]}; }}
-            .trend-better {{ color: {COLORS["green"]}; }}
+            .risk-detail-line {{
+                display: flex;
+                gap: 0.8rem;
+                flex-wrap: wrap;
+                align-items: center;
+            }}
+            .risk-pill {{
+                font-weight: 700;
+            }}
+            .risk-item.risk-worse {{
+                background: linear-gradient(180deg, #fff7f7 0%, #fff1f1 100%);
+                border-color: #ffbcbc;
+            }}
+            .risk-item.risk-better {{
+                background: linear-gradient(180deg, #f7fff9 0%, #f2fcf5 100%);
+                border-color: #b9ebc8;
+            }}
+            .risk-item.risk-stable {{
+                background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+                border-color: #d9e3f0;
+            }}
+            .trend-worse {{ color: #ef3d39; }}
+            .trend-stable {{ color: #8b95a3; }}
+            .trend-better {{ color: #1cab55; }}
             .dash-bottom-space {{
                 margin-top: 1rem;
             }}
@@ -2190,17 +2212,24 @@ def render_dashboard_milestones(df: pd.DataFrame) -> None:
 
 def render_dashboard_risks(df: pd.DataFrame) -> None:
     items = []
-    ranked = risk_table(df)
+    ranked = (
+        df[["Program", "Lead", "Open Risks", "Escalations", "Risk Detail", "Mitigation"]]
+        .sort_values(["Escalations", "Open Risks"], ascending=False)
+        .head(5)
+        .reset_index(drop=True)
+    )
     trend_classes = ["trend-worse", "trend-stable", "trend-better", "trend-stable", "trend-worse"]
     trend_labels = ["Worse", "Stable", "Better", "Stable", "Worse"]
     for index, (_, row) in enumerate(ranked.iterrows()):
         trend_class = trend_classes[index % len(trend_classes)]
         trend_label = trend_labels[index % len(trend_labels)]
+        card_class = trend_class.replace("trend-", "risk-")
         severity = "High" if int(row["Escalations"]) > 1 or int(row["Open Risks"]) >= 5 else ("Medium" if int(row["Open Risks"]) >= 3 else "Low")
         items.append(
-            f'<div class="risk-item">'
-            f'<div class="risk-head"><div><div class="risk-title">{row["Program"]}</div><div class="risk-meta">Severity: {severity}</div></div><div class="risk-trend {trend_class}">{trend_label}</div></div>'
-            f'<div class="risk-meta">Mitigation: {row["Mitigation"]}</div>'
+            f'<div class="risk-item {card_class}">'
+            f'<div class="risk-head"><div class="risk-title">{row["Risk Detail"]}</div><div class="risk-trend {trend_class}">{"↑ " if trend_label == "Worse" else ("↓ " if trend_label == "Better" else "→ ")}{trend_label}</div></div>'
+            f'<div class="risk-detail-line"><div class="risk-meta">{row["Program"]}</div><div class="risk-meta"><span class="risk-pill">Severity:</span> {severity}</div></div>'
+            f'<div class="risk-meta"><span class="risk-pill">Mitigation:</span> {row["Lead"]}</div>'
             f'</div>'
         )
     render_html('<div class="dash-card"><div class="section-bar">Key Risks Across Portfolio</div><div class="dashboard-stack">' + "".join(items) + "</div></div>")
