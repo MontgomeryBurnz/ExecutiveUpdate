@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from textwrap import dedent
+from urllib.parse import quote
 
 import altair as alt
 import pandas as pd
@@ -2258,6 +2259,29 @@ def render_help_support() -> None:
     )
 
 
+def roadmap_stage_segments(stage: str, progress: int) -> list[dict[str, object]]:
+    labels = ["Discover", "Plan", "Execute", "Stabilize", "Value"]
+    widths = [0.15, 0.18, 0.35, 0.20, 0.12]
+    active_map = {
+        "Discovery": 0,
+        "Phase 1": 1,
+        "Phase 2": 2,
+        "Phase 3": 3,
+        "Phase 4": 4,
+    }
+    colors = ["#b8c6fb", "#dcc7fb", "#294bb5", "#b7efc7", "#9fe9c4"]
+    text_colors = ["#4454d8", "#7b33d6", "#ffffff", "#17804c", "#107f67"]
+    active_index = active_map.get(stage, 0)
+    reached = min(4, max(active_index, round(progress / 25)))
+    segments = []
+    for idx, (label, width, color, text_color) in enumerate(zip(labels, widths, colors, text_colors)):
+        state = "future" if idx > reached else ("active" if idx == active_index else "complete")
+        bg = color if state != "future" else "#e8edf6"
+        fg = text_color if state != "future" else "#9aa5b2"
+        segments.append({"label": label, "width": width, "bg": bg, "fg": fg})
+    return segments
+
+
 def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
     def esc(value: object) -> str:
         return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -2273,10 +2297,11 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
     for _, row in df.sort_values(["Milestone Date", "Program"]).iterrows():
         trend = "↑" if row["Status"] == "On Track" else ("!" if row["Status"] == "Needs Attention" else "↓")
         rag_class = "rag-green" if row["Status"] == "On Track" else ("rag-yellow" if row["Status"] == "Needs Attention" else "rag-red")
+        program_link = f"?page={quote('Program One-Pager')}&program={quote(str(row['Program']))}"
         grid_rows.append(
             f"""
             <tr>
-                <td class="program-cell"><div class="program-name">{esc(row["Program"])}</div></td>
+                <td class="program-cell"><div class="program-name"><a href="{program_link}" target="_top">{esc(row["Program"])}</a></div></td>
                 <td>{esc(row["Lead"])}</td>
                 <td>{esc(row["Stage"])}</td>
                 <td><span class="rag-dot {rag_class}"></span></td>
@@ -2289,20 +2314,32 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
         )
 
     roadmap_rows = []
-    for _, row in df.sort_values(["Stage", "Program"]).iterrows():
-        active_stage = row["Stage"]
-        cells = []
-        for stage, label, css in [
-            ("Discovery", "Disc", "disc"),
-            ("Phase 1", "1", "phase1"),
-            ("Phase 2", "2", "phase2"),
-            ("Phase 3", "3", "phase3"),
-            ("Phase 4", "4", "phase4"),
-        ]:
-            cls = css if active_stage == stage else "empty"
-            cells.append(f'<div class="road-pill {cls}">{label if active_stage == stage else ""}</div>')
+    for idx, (_, row) in enumerate(df.sort_values(["Stage", "Program"]).iterrows()):
+        segments = roadmap_stage_segments(str(row["Stage"]), int(row["Progress"]))
+        milestone_label = esc(row["Milestone"])
+        marker_pos = max(12, min(88, int(row["Progress"])))
+        marker_class = "road-marker-alert" if row["Status"] == "At Risk" else ("road-marker-warn" if row["Status"] == "Needs Attention" else "road-marker-ok")
+        segment_html = "".join(
+            f'<div class="road-band-segment" style="width:{seg["width"] * 100:.1f}%; background:{seg["bg"]}; color:{seg["fg"]};">{seg["label"]}</div>'
+            for seg in segments
+        )
+        marker_html = ""
+        if idx < 4:
+            marker_html = (
+                f'<div class="road-marker {marker_class}" style="left:{marker_pos}%"></div>'
+                f'<div class="road-marker-label" style="left:{marker_pos}%">{milestone_label}</div>'
+            )
         roadmap_rows.append(
-            f'<div class="road-row"><div class="road-name">{esc(row["Program"])}</div>{"".join(cells)}<div class="road-progress">{int(row["Progress"])}%</div></div>'
+            f"""
+            <div class="roadmap-journey">
+                <div class="roadmap-journey-name">{esc(row["Program"])}</div>
+                <div class="road-band-wrap">
+                    <div class="road-band">{segment_html}</div>
+                    {marker_html}
+                </div>
+                <div class="roadmap-progress">{int(row["Progress"])}% complete</div>
+            </div>
+            """
         )
 
     milestone_cards = []
@@ -2625,6 +2662,15 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
             color: #305da8;
             font-weight: 800;
         }}
+        .program-name a {{
+            color: #305da8;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }}
+        .program-name a:hover {{
+            color: #1e4fa6;
+            border-bottom-color: #1e4fa6;
+        }}
         .status-note {{
             color: #6f8298;
         }}
@@ -2647,39 +2693,79 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
             font-weight: 800;
             margin-bottom: 14px;
         }}
+        .roadmap-quarter-row {{
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin: 8px 0 18px;
+            font-size: 22px;
+            color: #a3a7ad;
+        }}
+        .roadmap-quarter-row .active {{
+            color: #294bb5;
+            font-weight: 800;
+        }}
         .roadmap-grid {{
             display: grid;
-            gap: 10px;
-            margin-top: 16px;
+            gap: 24px;
+            margin-top: 12px;
         }}
-        .road-row {{
-            display: grid;
-            grid-template-columns: minmax(150px, 185px) repeat(5, minmax(54px, 1fr)) 56px;
-            gap: 8px;
-            align-items: center;
+        .roadmap-journey-name {{
+            font-size: 18px;
+            font-weight: 800;
+            color: #3f4a58;
+            margin-bottom: 8px;
         }}
-        .road-name {{
-            font-size: 14px;
-            font-weight: 700;
-            color: #435b76;
+        .road-band-wrap {{
+            position: relative;
+            padding-bottom: 32px;
         }}
-        .road-pill {{
-            height: 24px;
+        .road-band {{
+            display: flex;
+            align-items: stretch;
+            width: 100%;
+            height: 42px;
             border-radius: 999px;
+            background: #f0f2f5;
+            overflow: hidden;
+        }}
+        .road-band-segment {{
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
-            font-weight: 800;
-            color: #7f91a6;
-            background: #edf2f7;
+            font-size: 16px;
+            font-weight: 700;
         }}
-        .disc {{ background: #dbe6fb; color: #5071ad; }}
-        .phase1 {{ background: #f8dab1; color: #a26d1f; }}
-        .phase2 {{ background: #e0d2fb; color: #7d5ab8; }}
-        .phase3 {{ background: #d4e9ff; color: #5880b8; }}
-        .phase4 {{ background: #daf2e2; color: #478d68; }}
+        .road-band-segment:first-child {{
+            border-top-left-radius: 999px;
+            border-bottom-left-radius: 999px;
+        }}
+        .road-band-segment:last-child {{
+            border-top-right-radius: 999px;
+            border-bottom-right-radius: 999px;
+        }}
+        .road-marker {{
+            position: absolute;
+            top: -8px;
+            width: 18px;
+            height: 56px;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }}
+        .road-marker-ok {{ background: #294bb5; }}
+        .road-marker-warn {{ background: #ff9800; }}
+        .road-marker-alert {{ background: #f44336; }}
+        .road-marker-label {{
+            position: absolute;
+            top: 58px;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+            color: #d97800;
+        }}
         .road-progress {{
+            margin-top: 2px;
             text-align: right;
             color: #8092a8;
             font-size: 12px;
@@ -2913,7 +2999,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame) -> None:
                             <div class="card">
                                 <div class="card-eyebrow">Portfolio Roadmap - FY25</div>
                                 <div class="card-title">Program Timeline</div>
-                                <div class="card-copy">Phase-based roadmap aligned to the command-center portfolio view.</div>
+                                <div class="roadmap-quarter-row"><span>Q1 FY25</span><span>Q2 FY25</span><span class="active">Q3 FY25</span><span>Q4 FY25</span><span>Q1 FY26</span></div>
                                 <div class="roadmap-grid">{''.join(roadmap_rows)}</div>
                             </div>
                         </div>
@@ -3201,6 +3287,15 @@ def render_executive_dashboard(program: str, df: pd.DataFrame) -> None:
 
 
 inject_styles()
+
+query_params = st.query_params
+requested_page = query_params.get("page")
+requested_program = query_params.get("program")
+if requested_program in ALL_PROGRAMS:
+    st.session_state["selected_program"] = requested_program
+    st.session_state["sidebar_selected_program"] = requested_program
+if requested_page in PAGES:
+    st.session_state["current_page"] = requested_page
 
 with st.sidebar:
     if "current_page" not in st.session_state or st.session_state["current_page"] not in PAGES:
