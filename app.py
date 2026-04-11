@@ -2277,12 +2277,9 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
                 "At Risk": '<span class="rag-dot rag-red"></span>',
             }.get(str(row["Status"]), '<span class="rag-dot rag-green"></span>')
             milestone_date = pd.to_datetime(row["Milestone Date"]).strftime("%b %d, %Y")
-            program_url = f'?page={quote("Program One-Pager")}&program={quote(str(row["Program"]))}'
             row_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
-            row_cols[0].markdown(
-                f'<a class="program-grid-link" href="{program_url}">{row["Program"]}</a>',
-                unsafe_allow_html=True,
-            )
+            if row_cols[0].button(str(row["Program"]), key=f"program_grid_nav_{idx}_{row['Program']}", use_container_width=True, type="primary"):
+                navigate_to_program(str(row["Program"]))
             row_cols[1].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
             row_cols[2].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
             row_cols[3].markdown(f'<div style="margin-top:0.7rem;">{rag_html}</div>', unsafe_allow_html=True)
