@@ -1142,6 +1142,11 @@ def inject_styles() -> None:
                 background: linear-gradient(90deg, {COLORS["blue"]}, #5b8ef1);
                 color: white;
             }}
+            section[data-testid="stSidebar"] .stButton > button[kind="primary"],
+            section[data-testid="stSidebar"] .stButton > button[kind="primary"] * {{
+                color: #ffffff !important;
+                fill: #ffffff !important;
+            }}
             .program-grid-link {{
                 display: block;
                 width: 100%;
