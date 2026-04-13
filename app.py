@@ -1614,56 +1614,6 @@ def navigate_to_program(program: str) -> None:
     st.rerun()
 
 
-def build_program_search_text(portfolio: str, program: str, reporting_date: date, row: pd.Series) -> str:
-    details = ensure_program_details(portfolio, program, reporting_date, row)
-    parts: list[str] = [
-        str(row["Program"]),
-        str(row["Executive Sponsor"]),
-        str(row["Lead"]),
-        str(row["Stage"]),
-        str(row["Status"]),
-        str(row["Milestone"]),
-        str(row["Summary"]),
-        str(row["Upcoming Work"]),
-        str(row["Risk Detail"]),
-        str(row["Decision Needed"]),
-        str(row["Mitigation"]),
-        str(row["Status Note"]),
-        str(details["accomplishments"]),
-        str(details["next_steps"]),
-        str(details["dependencies"]),
-        str(details["executive_summary"]),
-    ]
-
-    for frame, cols in [
-        (details["milestones"], ["Milestone Name", "Comment"]),
-        (details["risks"], ["Title", "Description", "Mitigation Plan", "Owner"]),
-        (details["decisions"], ["Decision Topic", "Impact if Unresolved", "Recommendation"]),
-    ]:
-        if not frame.empty:
-            for col in cols:
-                if col in frame.columns:
-                    parts.extend(frame[col].fillna("").astype(str).tolist())
-
-    return " ".join(parts).lower()
-
-
-def filter_programs_for_search(portfolio: str, df: pd.DataFrame, reporting_date: date, query: str) -> pd.DataFrame:
-    terms = [term for term in re.split(r"\s+", str(query).strip().lower()) if term]
-    if not terms:
-        return df.copy()
-
-    matched_rows = []
-    for _, row in df.iterrows():
-        haystack = build_program_search_text(portfolio, str(row["Program"]), reporting_date, row)
-        if all(term in haystack for term in terms):
-            matched_rows.append(row)
-
-    if not matched_rows:
-        return df.iloc[0:0].copy()
-    return pd.DataFrame(matched_rows).reset_index(drop=True)
-
-
 def weekly_updates_password() -> str | None:
     try:
         return str(st.secrets.get("weekly_updates_password", "")).strip()
@@ -2562,17 +2512,12 @@ def roadmap_stage_segments(stage: str, progress: int) -> list[dict[str, object]]
 
 
 def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, refreshed_at: datetime) -> None:
-    search_key = f"portfolio_search_{portfolio}"
-    search_query = str(st.session_state.get(search_key, "")).strip()
-    filtered_df = filter_programs_for_search(portfolio, df, reporting_date, search_query)
-    view_df = filtered_df if search_query else df.copy()
-
-    total_programs = len(view_df)
-    on_track = int(view_df["Status"].eq("On Track").sum()) if not view_df.empty else 0
-    at_risk = int(view_df["Status"].eq("At Risk").sum()) if not view_df.empty else 0
-    delayed = int(view_df["Status"].eq("Needs Attention").sum()) if not view_df.empty else 0
-    avg_complete = int(round(view_df["Progress"].mean())) if not view_df.empty else 0
-    decisions_pending = int((~view_df["Decision Needed"].str.contains("No ", na=False)).sum()) if not view_df.empty else 0
+    total_programs = len(df)
+    on_track = int(df["Status"].eq("On Track").sum())
+    at_risk = int(df["Status"].eq("At Risk").sum())
+    delayed = int(df["Status"].eq("Needs Attention").sum())
+    avg_complete = int(round(df["Progress"].mean()))
+    decisions_pending = int((~df["Decision Needed"].str.contains("No ", na=False)).sum())
     render_html(
         f"""
         <div class="topbar">
@@ -2594,22 +2539,6 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, ref
         </div>
         """,
     )
-    search_cols = st.columns([1.0, 0.18], gap="small")
-    search_cols[0].text_input(
-        "Search portfolio content",
-        key=search_key,
-        placeholder="Search programs, milestones, risks, decisions, owners, summaries...",
-        label_visibility="collapsed",
-    )
-    if search_cols[1].button("Clear", use_container_width=True):
-        st.session_state[search_key] = ""
-        st.rerun()
-    active_query = str(st.session_state.get(search_key, "")).strip()
-    if active_query:
-        view_df = filter_programs_for_search(portfolio, df, reporting_date, active_query)
-        st.caption(f'Showing {len(view_df)} of {len(df)} programs for "{active_query}"')
-    else:
-        view_df = df.copy()
 
     kpi_cols = st.columns(5, gap="large")
     kpi_data = [
@@ -2627,18 +2556,13 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, ref
 
     left, right = st.columns([1.62, 0.92], gap="large")
     with left:
-        if view_df.empty:
-            st.info("No portfolio results matched the current search.")
-        else:
-            render_dashboard_program_grid(view_df)
-            render_dashboard_roadmap(view_df)
+        render_dashboard_program_grid(df)
+        render_dashboard_roadmap(df)
     with right:
-        if not view_df.empty:
-            render_dashboard_milestones(view_df)
-            render_dashboard_risks(view_df)
+        render_dashboard_milestones(df)
+        render_dashboard_risks(df)
 
-    if not view_df.empty:
-        render_dashboard_decisions(view_df)
+    render_dashboard_decisions(df)
 
 
 def render_program_update(portfolio: str, program: str, df: pd.DataFrame, reporting_date: date) -> None:
