@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Compliance Hub - Executive Tracker", layout="wide")
+st.set_page_config(page_title="Impower Program Command Center", layout="wide")
 
 COLORS = {
     "navy": "#2a4561",
