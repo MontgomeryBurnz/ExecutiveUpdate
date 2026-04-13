@@ -394,7 +394,7 @@ def inject_styles() -> None:
             }}
             .topbar {{
                 display: grid;
-                grid-template-columns: 240px minmax(280px, 1fr) auto;
+                grid-template-columns: 240px minmax(280px, 1fr);
                 gap: 0.85rem;
                 align-items: center;
                 margin-bottom: 1rem;
@@ -412,24 +412,6 @@ def inject_styles() -> None:
             .brand-copy {{
                 font-size: 0.82rem;
                 color: {COLORS["muted"]};
-            }}
-            .toolbar-actions {{
-                display: flex;
-                gap: 0.5rem;
-                align-items: center;
-            }}
-            .toolbar-icon {{
-                width: 34px;
-                height: 34px;
-                border-radius: 10px;
-                border: 1px solid {COLORS["border"]};
-                background: rgba(255,255,255,0.95);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: {COLORS["muted"]};
-                font-size: 0.9rem;
-                font-weight: 700;
             }}
             .dashboard-title-block {{
                 margin-bottom: 1rem;
@@ -2526,12 +2508,6 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, ref
                 <div class="brand-copy">Strategic Program Intelligence</div>
             </div>
             <div></div>
-            <div class="toolbar-actions">
-                <div class="toolbar-icon">◐</div>
-                <div class="toolbar-icon">◔</div>
-                <div class="toolbar-icon">3</div>
-                <div class="toolbar-icon">⚙</div>
-            </div>
         </div>
         <div class="dashboard-title-block">
             <div class="dashboard-title">FY25 Strategic Transformation Portfolio</div>
