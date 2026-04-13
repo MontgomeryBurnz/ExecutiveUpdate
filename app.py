@@ -2960,7 +2960,7 @@ with st.sidebar:
         st.session_state["current_page"] = PAGES[0]
     if "selected_program" not in st.session_state or st.session_state["selected_program"] not in ALL_PROGRAMS:
         st.session_state["selected_program"] = ALL_PROGRAMS[0]
-    st.markdown("### Program Context")
+    st.markdown("### Command Center")
     if "sidebar_selected_program" not in st.session_state or st.session_state["sidebar_selected_program"] not in ALL_PROGRAMS:
         st.session_state["sidebar_selected_program"] = st.session_state["selected_program"]
     st.selectbox(
