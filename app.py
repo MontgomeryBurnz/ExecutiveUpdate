@@ -2263,35 +2263,31 @@ def render_dashboard_program_grid(df: pd.DataFrame) -> None:
             <div class="dash-card-copy">Program, owner, phase, health, progress, next milestone, and current delivery note.</div>
             """
         )
-        header_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
-        headers = ["Program", "Owner", "Phase", "RAG", "% Done", "Trend", "Next Milestone", "Status Note"]
-        for col, label in zip(header_cols, headers):
-            col.markdown(f'<div class="metric-title" style="margin-bottom:0.2rem;">{label}</div>', unsafe_allow_html=True)
-
         ordered = df.sort_values(["Milestone Date", "Program"]).reset_index(drop=True)
         for idx, (_, row) in enumerate(ordered.iterrows()):
             trend = "↑" if row["Status"] == "On Track" else ("!" if row["Status"] == "Needs Attention" else "↓")
-            rag_html = {
-                "On Track": '<span class="rag-dot rag-green"></span>',
-                "Needs Attention": '<span class="rag-dot rag-yellow"></span>',
-                "At Risk": '<span class="rag-dot rag-red"></span>',
-            }.get(str(row["Status"]), '<span class="rag-dot rag-green"></span>')
             milestone_date = pd.to_datetime(row["Milestone Date"]).strftime("%b %d, %Y")
-            row_cols = st.columns([1.25, 0.85, 0.8, 0.45, 0.55, 0.45, 0.95, 1.4], gap="small")
-            if row_cols[0].button(str(row["Program"]), key=f"program_grid_nav_{idx}_{row['Program']}", use_container_width=True, type="primary"):
-                navigate_to_program(str(row["Program"]))
-            row_cols[1].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
-            row_cols[2].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
-            row_cols[3].markdown(f'<div style="margin-top:0.7rem;">{rag_html}</div>', unsafe_allow_html=True)
-            row_cols[4].markdown(f'<div class="copy" style="margin-top:0.45rem;">{int(row["Progress"])}%</div>', unsafe_allow_html=True)
-            row_cols[5].markdown(f'<div class="copy" style="margin-top:0.45rem; font-weight:800;">{trend}</div>', unsafe_allow_html=True)
-            row_cols[6].markdown(
-                f'<div class="copy" style="margin-top:0.2rem;"><strong style="color:{COLORS["navy"]};">{row["Milestone"]}</strong><br>{milestone_date}</div>',
-                unsafe_allow_html=True,
-            )
-            row_cols[7].markdown(f'<div class="copy" style="margin-top:0.45rem;">{row["Status Note"]}</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                top_cols = st.columns([1.35, 0.7, 0.7], gap="medium")
+                if top_cols[0].button(str(row["Program"]), key=f"program_grid_nav_{idx}_{row['Program']}", use_container_width=True, type="primary"):
+                    navigate_to_program(str(row["Program"]))
+                top_cols[1].markdown(f'<div class="metric-title">RAG</div>{dashboard_status_tag(str(row["Status"]))}', unsafe_allow_html=True)
+                top_cols[2].markdown(f'<div class="metric-title">% Complete</div><div class="copy" style="margin-top:0.45rem; font-weight:800; color:{COLORS["navy"]};">{int(row["Progress"])}% · {trend}</div>', unsafe_allow_html=True)
+
+                meta_cols = st.columns(3, gap="large")
+                meta_cols[0].markdown(f'<div class="metric-title">Owner</div><div class="copy" style="margin-top:0.35rem;">{row["Lead"]}</div>', unsafe_allow_html=True)
+                meta_cols[1].markdown(f'<div class="metric-title">Phase</div><div class="copy" style="margin-top:0.35rem;">{row["Stage"]}</div>', unsafe_allow_html=True)
+                meta_cols[2].markdown(
+                    f'<div class="metric-title">Next Milestone</div><div class="copy" style="margin-top:0.15rem;"><strong style="color:{COLORS["navy"]};">{row["Milestone"]}</strong><br>{milestone_date}</div>',
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    f'<div class="metric-title" style="margin-top:0.6rem;">Status Note</div><div class="copy" style="margin-top:0.3rem;">{row["Status Note"]}</div>',
+                    unsafe_allow_html=True,
+                )
             if idx < len(ordered) - 1:
-                st.markdown("<div style='height:1px;background:#e8eef6;margin:0.2rem 0 0.35rem;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
 
 
 def render_dashboard_milestones(df: pd.DataFrame) -> None:
