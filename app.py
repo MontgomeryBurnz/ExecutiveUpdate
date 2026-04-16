@@ -2509,7 +2509,7 @@ def render_dashboard(portfolio: str, df: pd.DataFrame, reporting_date: date, ref
             <div></div>
         </div>
         <div class="dashboard-title-block">
-            <div class="dashboard-title">FY25 Strategic Program Intelligence</div>
+            <div class="dashboard-title">Jessie's Program Tracker</div>
             <div class="dashboard-meta"><span>Week Ending {reporting_date:%b %d, %Y}</span><span class="update-pill">Refreshed {refreshed_at:%I:%M %p}</span></div>
         </div>
         """,
